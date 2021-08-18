@@ -51,6 +51,7 @@ MonoBehaviour:
   PersistNetworkManagerToOfflineScene: 1
   runInBackground: 1
   autoStartServerBuild: 1
+  serverTickRate: 30
   offlineScene: 
   onlineScene: 
   transport: {fileID: 5902396272763538541}
@@ -67,7 +68,7 @@ MonoBehaviour:
   - {fileID: 830971732508115933, guid: 6ee84ddd87c604644bdfd5194b7989b6, type: 3}
   _sendTime: 0
   _autoStartRollback: 1
-  _rollbackMode: 0
+  _rollbackMode: 1
 --- !u!114 &2394090620823507203
 MonoBehaviour:
   m_ObjectHideFlags: 0

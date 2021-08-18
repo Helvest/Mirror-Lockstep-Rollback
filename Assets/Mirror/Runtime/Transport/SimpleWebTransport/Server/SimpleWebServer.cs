@@ -4,101 +4,102 @@ using UnityEngine;
 
 namespace Mirror.SimpleWeb
 {
-	public class SimpleWebServer
-	{
-		private readonly int maxMessagesPerTick;
-		private readonly WebSocketServer server;
-		private readonly BufferPool bufferPool;
+    public class SimpleWebServer
+    {
+        readonly int maxMessagesPerTick;
 
-		public SimpleWebServer(int maxMessagesPerTick, TcpConfig tcpConfig, int maxMessageSize, int handshakeMaxSize, SslConfig sslConfig)
-		{
-			this.maxMessagesPerTick = maxMessagesPerTick;
-			// use max because bufferpool is used for both messages and handshake
-			int max = Math.Max(maxMessageSize, handshakeMaxSize);
-			bufferPool = new BufferPool(5, 20, max);
+        readonly WebSocketServer server;
+        readonly BufferPool bufferPool;
 
-			server = new WebSocketServer(tcpConfig, maxMessageSize, handshakeMaxSize, sslConfig, bufferPool);
-		}
+        public SimpleWebServer(int maxMessagesPerTick, TcpConfig tcpConfig, int maxMessageSize, int handshakeMaxSize, SslConfig sslConfig)
+        {
+            this.maxMessagesPerTick = maxMessagesPerTick;
+            // use max because bufferpool is used for both messages and handshake
+            int max = Math.Max(maxMessageSize, handshakeMaxSize);
+            bufferPool = new BufferPool(5, 20, max);
 
-		public bool Active { get; private set; }
+            server = new WebSocketServer(tcpConfig, maxMessageSize, handshakeMaxSize, sslConfig, bufferPool);
+        }
 
-		public event Action<int> onConnect;
-		public event Action<int> onDisconnect;
-		public event Action<int, ArraySegment<byte>> onData;
-		public event Action<int, Exception> onError;
+        public bool Active { get; private set; }
 
-		public void Start(ushort port)
-		{
-			server.Listen(port);
-			Active = true;
-		}
+        public event Action<int> onConnect;
+        public event Action<int> onDisconnect;
+        public event Action<int, ArraySegment<byte>> onData;
+        public event Action<int, Exception> onError;
 
-		public void Stop()
-		{
-			server.Stop();
-			Active = false;
-		}
+        public void Start(ushort port)
+        {
+            server.Listen(port);
+            Active = true;
+        }
 
-		public void SendAll(List<int> connectionIds, ArraySegment<byte> source)
-		{
-			var buffer = bufferPool.Take(source.Count);
-			buffer.CopyFrom(source);
-			buffer.SetReleasesRequired(connectionIds.Count);
+        public void Stop()
+        {
+            server.Stop();
+            Active = false;
+        }
 
-			// make copy of array before for each, data sent to each client is the same
-			foreach (int id in connectionIds)
-			{
-				server.Send(id, buffer);
-			}
-		}
-		public void SendOne(int connectionId, ArraySegment<byte> source)
-		{
-			var buffer = bufferPool.Take(source.Count);
-			buffer.CopyFrom(source);
+        public void SendAll(List<int> connectionIds, ArraySegment<byte> source)
+        {
+            ArrayBuffer buffer = bufferPool.Take(source.Count);
+            buffer.CopyFrom(source);
+            buffer.SetReleasesRequired(connectionIds.Count);
 
-			server.Send(connectionId, buffer);
-		}
+            // make copy of array before for each, data sent to each client is the same
+            foreach (int id in connectionIds)
+            {
+                server.Send(id, buffer);
+            }
+        }
+        public void SendOne(int connectionId, ArraySegment<byte> source)
+        {
+            ArrayBuffer buffer = bufferPool.Take(source.Count);
+            buffer.CopyFrom(source);
 
-		public bool KickClient(int connectionId)
-		{
-			return server.CloseConnection(connectionId);
-		}
+            server.Send(connectionId, buffer);
+        }
 
-		public string GetClientAddress(int connectionId)
-		{
-			return server.GetClientAddress(connectionId);
-		}
+        public bool KickClient(int connectionId)
+        {
+            return server.CloseConnection(connectionId);
+        }
 
-		public void ProcessMessageQueue(MonoBehaviour behaviour)
-		{
-			int processedCount = 0;
-			// check enabled every time in case behaviour was disabled after data
-			while (
-				behaviour.enabled &&
-				processedCount < maxMessagesPerTick &&
-				// Dequeue last
-				server.receiveQueue.TryDequeue(out var next)
-				)
-			{
-				processedCount++;
+        public string GetClientAddress(int connectionId)
+        {
+            return server.GetClientAddress(connectionId);
+        }
 
-				switch (next.type)
-				{
-					case EventType.Connected:
-						onConnect?.Invoke(next.connId);
-						break;
-					case EventType.Data:
-						onData?.Invoke(next.connId, next.data.ToSegment());
-						next.data.Release();
-						break;
-					case EventType.Disconnected:
-						onDisconnect?.Invoke(next.connId);
-						break;
-					case EventType.Error:
-						onError?.Invoke(next.connId, next.exception);
-						break;
-				}
-			}
-		}
-	}
+        public void ProcessMessageQueue(MonoBehaviour behaviour)
+        {
+            int processedCount = 0;
+            // check enabled every time in case behaviour was disabled after data
+            while (
+                behaviour.enabled &&
+                processedCount < maxMessagesPerTick &&
+                // Dequeue last
+                server.receiveQueue.TryDequeue(out Message next)
+                )
+            {
+                processedCount++;
+
+                switch (next.type)
+                {
+                    case EventType.Connected:
+                        onConnect?.Invoke(next.connId);
+                        break;
+                    case EventType.Data:
+                        onData?.Invoke(next.connId, next.data.ToSegment());
+                        next.data.Release();
+                        break;
+                    case EventType.Disconnected:
+                        onDisconnect?.Invoke(next.connId);
+                        break;
+                    case EventType.Error:
+                        onError?.Invoke(next.connId, next.exception);
+                        break;
+                }
+            }
+        }
+    }
 }

@@ -1,37 +1,38 @@
 using System;
+using System.Collections.Generic;
 
 namespace Mirror
 {
-	public class NetworkConnectionToClient : NetworkConnection
-	{
-		public override string address =>
-			Transport.activeTransport.ServerGetClientAddress(connectionId);
+    public class NetworkConnectionToClient : NetworkConnection
+    {
+       
 
-		// unbatcher
-		public Unbatcher unbatcher = new Unbatcher();
+        public override string address =>
+            Transport.activeTransport.ServerGetClientAddress(connectionId);
 
-		public NetworkConnectionToClient(int networkConnectionId)
-			: base(networkConnectionId) { }
+        // unbatcher
+        public Unbatcher unbatcher = new Unbatcher();
 
-		// Send stage three: hand off to transport
-		protected override void SendToTransport(ArraySegment<byte> segment, int channelId = Channels.Reliable)
-		{
-			Transport.activeTransport.ServerSend(connectionId, segment, channelId);
-		}
+        public NetworkConnectionToClient(int networkConnectionId)
+            : base(networkConnectionId) {}
 
-		/// <summary>Disconnects this connection.</summary>
-		public override void Disconnect()
-		{
-			// set not ready and handle clientscene disconnect in any case
-			// (might be client or host mode here)
-			isReady = false;
-			Transport.activeTransport.ServerDisconnect(connectionId);
+        // Send stage three: hand off to transport
+        protected override void SendToTransport(ArraySegment<byte> segment, int channelId = Channels.Reliable) =>
+            Transport.activeTransport.ServerSend(connectionId, segment, channelId);
 
-			// IMPORTANT: NetworkConnection.Disconnect() is NOT called for
-			// voluntary disconnects from the other end.
-			// -> so all 'on disconnect' cleanup code needs to be in
-			//    OnTransportDisconnect, where it's called for both voluntary
-			//    and involuntary disconnects!
-		}
-	}
+        /// <summary>Disconnects this connection.</summary>
+        public override void Disconnect()
+        {
+            // set not ready and handle clientscene disconnect in any case
+            // (might be client or host mode here)
+            isReady = false;
+            Transport.activeTransport.ServerDisconnect(connectionId);
+
+            // IMPORTANT: NetworkConnection.Disconnect() is NOT called for
+            // voluntary disconnects from the other end.
+            // -> so all 'on disconnect' cleanup code needs to be in
+            //    OnTransportDisconnect, where it's called for both voluntary
+            //    and involuntary disconnects!
+        }
+    }
 }

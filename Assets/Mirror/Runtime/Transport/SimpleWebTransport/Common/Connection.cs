@@ -6,85 +6,85 @@ using System.Threading;
 
 namespace Mirror.SimpleWeb
 {
-	internal sealed class Connection : IDisposable
-	{
-		public const int IdNotSet = -1;
-		private readonly object disposedLock = new object();
+    internal sealed class Connection : IDisposable
+    {
+        public const int IdNotSet = -1;
 
-		public TcpClient client;
+        readonly object disposedLock = new object();
 
-		public int connId = IdNotSet;
-		public Stream stream;
-		public Thread receiveThread;
-		public Thread sendThread;
+        public TcpClient client;
 
-		public ManualResetEventSlim sendPending = new ManualResetEventSlim(false);
-		public ConcurrentQueue<ArrayBuffer> sendQueue = new ConcurrentQueue<ArrayBuffer>();
+        public int connId = IdNotSet;
+        public Stream stream;
+        public Thread receiveThread;
+        public Thread sendThread;
 
-		public Action<Connection> onDispose;
-		private volatile bool hasDisposed;
+        public ManualResetEventSlim sendPending = new ManualResetEventSlim(false);
+        public ConcurrentQueue<ArrayBuffer> sendQueue = new ConcurrentQueue<ArrayBuffer>();
 
-		public Connection(TcpClient client, Action<Connection> onDispose)
-		{
-			this.client = client ?? throw new ArgumentNullException(nameof(client));
-			this.onDispose = onDispose;
-		}
+        public Action<Connection> onDispose;
 
+        volatile bool hasDisposed;
 
-		/// <summary>
-		/// disposes client and stops threads
-		/// </summary>
-		public void Dispose()
-		{
-			Log.Verbose($"Dispose {ToString()}");
-
-			// check hasDisposed first to stop ThreadInterruptedException on lock
-			if (hasDisposed)
-			{ return; }
-
-			Log.Info($"Connection Close: {ToString()}");
+        public Connection(TcpClient client, Action<Connection> onDispose)
+        {
+            this.client = client ?? throw new ArgumentNullException(nameof(client));
+            this.onDispose = onDispose;
+        }
 
 
-			lock (disposedLock)
-			{
-				// check hasDisposed again inside lock to make sure no other object has called this
-				if (hasDisposed)
-				{ return; }
-				hasDisposed = true;
+        /// <summary>
+        /// disposes client and stops threads
+        /// </summary>
+        public void Dispose()
+        {
+            Log.Verbose($"Dispose {ToString()}");
 
-				// stop threads first so they don't try to use disposed objects
-				receiveThread.Interrupt();
-				sendThread?.Interrupt();
+            // check hasDisposed first to stop ThreadInterruptedException on lock
+            if (hasDisposed) { return; }
 
-				try
-				{
-					// stream 
-					stream?.Dispose();
-					stream = null;
-					client.Dispose();
-					client = null;
-				}
-				catch (Exception e)
-				{
-					Log.Exception(e);
-				}
+            Log.Info($"Connection Close: {ToString()}");
 
-				sendPending.Dispose();
 
-				// release all buffers in send queue
-				while (sendQueue.TryDequeue(out var buffer))
-				{
-					buffer.Release();
-				}
+            lock (disposedLock)
+            {
+                // check hasDisposed again inside lock to make sure no other object has called this
+                if (hasDisposed) { return; }
+                hasDisposed = true;
 
-				onDispose.Invoke(this);
-			}
-		}
+                // stop threads first so they don't try to use disposed objects
+                receiveThread.Interrupt();
+                sendThread?.Interrupt();
 
-		public override string ToString()
-		{
-			var endpoint = client?.Client?.RemoteEndPoint;
-			return $"[Conn:{connId}, endPoint:{endpoint}]";
-		}
-	}
+                try
+                {
+                    // stream 
+                    stream?.Dispose();
+                    stream = null;
+                    client.Dispose();
+                    client = null;
+                }
+                catch (Exception e)
+                {
+                    Log.Exception(e);
+                }
+
+                sendPending.Dispose();
+
+                // release all buffers in send queue
+                while (sendQueue.TryDequeue(out ArrayBuffer buffer))
+                {
+                    buffer.Release();
+                }
+
+                onDispose.Invoke(this);
+            }
+        }
+
+        public override string ToString()
+        {
+            System.Net.EndPoint endpoint = client?.Client?.RemoteEndPoint;
+            return $"[Conn:{connId}, endPoint:{endpoint}]";
+        }
+    }
 }

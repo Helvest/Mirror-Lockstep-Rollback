@@ -29,7 +29,7 @@ namespace GameMode
 			if (IsServer)
 			{
 				_matchManager = Instantiate(_matchManagerPrefab);
-				NetworkServer.Spawn(_matchManager);
+				NetworkServer.Spawn(_matchManager.gameObject);
 
 				//SL.TryGet(out NetworkManager networkManager);
 				//networkManager.StartHost();
@@ -40,12 +40,9 @@ namespace GameMode
 		{
 			base.ExitState();
 
-			if (_matchManager)
+			if (IsServer && _matchManager != null)
 			{
-				if (IsServer)
-				{
-					NetworkServer.Destroy(_matchManager);
-				}
+				NetworkServer.Destroy(_matchManager.gameObject);			
 			}
 		}	
 	}

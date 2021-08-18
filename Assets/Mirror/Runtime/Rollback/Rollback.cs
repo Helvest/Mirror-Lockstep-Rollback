@@ -13,17 +13,25 @@ using Mirror;
 //public bool useRollback = false; 
 
 //In NetworkServer.NetworkLateUpdate()
-//Replace NetworkServer.Broadcast() by RollbackManager.Broadcast
+//Replace NetworkServer.Broadcast(); by Rollback.Broadcast();
 
 //Add to the end of NetworkClient.NetworkEarlyUpdate()
 //Rollback.OnClientNetworkEndOfEarlyUpdate();
 
 //In NetworkClient.RegisterSystemHandlers(bool hostMode)
-//Replace RegisterHandler<SpawnMessage>(OnSpawn)
+//Replace RegisterHandler<SpawnMessage>(OnSpawn);
 //By RegisterHandler<SpawnMessage>(Rollback.OnSpawn);
 //And
-//Replace RegisterHandler<SpawnMessage>(OnEntityStateMessage)
+//Replace RegisterHandler<SpawnMessage>(OnEntityStateMessage);
 //By RegisterHandler<SpawnMessage>(Rollback.OnEntityStateMessage);
+
+//Add to NetworkConnection
+//public readonly List<NetworkIdentity> newObserving = new List<NetworkIdentity>();
+
+//NetworkConnection.AddToObserving(NetworkIdentity netIdentity)
+//Replace observing.Add(netIdentity);
+//By newObserving.Add(netIdentity);
+//remove NetworkServer.ShowForConnection(netIdentity, this);
 
 namespace Mirror
 {

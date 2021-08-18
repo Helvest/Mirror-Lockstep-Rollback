@@ -3,14 +3,14 @@ using System.Reflection;
 
 namespace Mirror.Weaver
 {
-	internal static class Helpers
-	{
-		// This code is taken from SerializationWeaver
+    static class Helpers
+    {
+        // This code is taken from SerializationWeaver
 
-		public static string UnityEngineDllDirectoryName()
-		{
-			string directoryName = Path.GetDirectoryName(Assembly.GetExecutingAssembly().CodeBase);
-			return directoryName?.Replace(@"file:\", "");
-		}
-	}
+        public static string UnityEngineDllDirectoryName()
+        {
+            string directoryName = Path.GetDirectoryName(Assembly.GetExecutingAssembly().CodeBase);
+            return directoryName?.Replace(@"file:\", "");
+        }
+    }
 }
