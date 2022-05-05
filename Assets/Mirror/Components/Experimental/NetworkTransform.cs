@@ -1,12 +1,14 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 
 namespace Mirror.Experimental
 {
-    [DisallowMultipleComponent]
-    [AddComponentMenu("Network/Experimental/NetworkTransformExperimental")]
-    [HelpURL("https://mirror-networking.gitbook.io/docs/components/network-transform")]
-    public class NetworkTransform : NetworkTransformBase
-    {
-        protected override Transform targetTransform => transform;
-    }
+	[DisallowMultipleComponent]
+	// Deprecated 2022-01-18
+	[Obsolete("Use the default NetworkTransform instead, it has proper snapshot interpolation.")]
+	[AddComponentMenu("")]
+	public class NetworkTransform : NetworkTransformBase
+	{
+		protected override Transform targetTransform => transform;
+	}
 }

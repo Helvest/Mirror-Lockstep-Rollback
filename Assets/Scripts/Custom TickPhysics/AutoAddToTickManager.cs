@@ -23,19 +23,19 @@ namespace TickPhysics
 
 		private void OnEnable()
 		{
-			if (_physicObjects.Length != 0 && SL.TryGet(out ITickManager tickManager))
+			if (_physicObjects.Length != 0 && SL.TryGet(out ITickSystem tickSystem))
 			{
-				Debug.Log("Add " + _physicObjects?.Length +" script from " + gameObject.name, gameObject);
+				//Debug.Log("Add " + _physicObjects?.Length +" script from " + gameObject.name, gameObject);
 
-				tickManager.Add(_physicObjects);
+				tickSystem.Add(_physicObjects);
 			}
 		}
 
 		private void OnDisable()
 		{
-			if (_physicObjects.Length != 0 && SL.TryGet(out ITickManager tickManager))
+			if (_physicObjects.Length != 0 && SL.TryGet(out ITickSystem tickSystem))
 			{
-				tickManager.Remove(_physicObjects);
+				tickSystem.Remove(_physicObjects);
 			}
 		}
 	}

@@ -1,5 +1,13 @@
-#if DEBUG && !UNITY_WP_8_1 && !UNITY_WSA
-#if !WINRT || UNITY_EDITOR
+#if UNITY_5_3_OR_NEWER
+#define UNITY
+#if UNITY_IOS && !UNITY_EDITOR
+using UnityEngine;
+#endif
+#endif
+#if NETSTANDARD || NETCOREAPP
+using System.Runtime.InteropServices;
+#endif
+
 using System;
 using System.Net;
 using System.Net.Sockets;
@@ -7,192 +15,457 @@ using System.Threading;
 
 namespace FlyingWormConsole3.LiteNetLib
 {
+#if UNITY_IOS && !UNITY_EDITOR
+    public class UnitySocketFix : MonoBehaviour
+    {
+        internal IPAddress BindAddrIPv4;
+        internal IPAddress BindAddrIPv6;
+        internal bool Reuse;
+        internal IPv6Mode IPv6;
+        internal int Port;
+        internal bool Paused;
+        internal NetSocket Socket;
+        internal bool ManualMode;
+
+        private void Update()
+        {
+            if (Socket == null)
+                Destroy(gameObject);
+        }
+
+        private void OnApplicationPause(bool pause)
+        {
+            if (Socket == null)
+                return;
+            if (pause)
+            {
+                Paused = true;
+                Socket.Close(true);
+            }
+            else if (Paused)
+            {
+                if (!Socket.Bind(BindAddrIPv4, BindAddrIPv6, Port, Reuse, IPv6, ManualMode))
+                {
+                    NetDebug.WriteError("[S] Cannot restore connection \"{0}\",\"{1}\" port {2}", BindAddrIPv4, BindAddrIPv6, Port);
+                    Socket.OnErrorRestore();
+                }
+            }
+        }
+    }
+#endif
+
 	internal sealed class NetSocket
 	{
+		public const int ReceivePollingTime = 500000; //0.5 second
+
 		private Socket _udpSocketv4;
 		private Socket _udpSocketv6;
-		private NetEndPoint _localEndPoint;
 		private Thread _threadv4;
 		private Thread _threadv6;
-		private bool _running;
-		private readonly NetManager.OnMessageReceived _onMessageReceived;
+		private IPEndPoint _bufferEndPointv4;
+		private IPEndPoint _bufferEndPointv6;
 
-		private static readonly IPAddress MulticastAddressV6 = IPAddress.Parse(NetConstants.MulticastGroupIPv6);
-		private static readonly bool IPv6Support;
-		private const int SocketReceivePollTime = 100000;
-		private const int SocketSendPollTime = 5000;
+		private readonly NetManager _listener;
 
-		public NetEndPoint LocalEndPoint => _localEndPoint;
+		private const int SioUdpConnreset = -1744830452; //SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12
+		private static readonly IPAddress MulticastAddressV6 = IPAddress.Parse("ff02::1");
+		internal static readonly bool IPv6Support;
+#if UNITY_IOS && !UNITY_EDITOR
+        private UnitySocketFix _unitySocketFix;
 
-		static NetSocket()
+        public void OnErrorRestore()
+        {
+            Close(false);
+            _listener.OnMessageReceived(null, SocketError.NotConnected, new IPEndPoint(0,0));
+        }
+#endif
+		public int LocalPort { get; private set; }
+		public volatile bool IsRunning;
+
+		public short Ttl
 		{
-			try
+			get
 			{
-				//Unity3d .NET 2.0 throws exception.
-				// IPv6Support = Socket.OSSupportsIPv6;
-				IPv6Support = false;
+#if UNITY_SWITCH
+                return 0;
+#else
+				if (_udpSocketv4.AddressFamily == AddressFamily.InterNetworkV6)
+				{
+					return (short)_udpSocketv4.GetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.HopLimit);
+				}
+
+				return _udpSocketv4.Ttl;
+#endif
 			}
-			catch
+			set
 			{
-				IPv6Support = false;
+#if !UNITY_SWITCH
+				if (_udpSocketv4.AddressFamily == AddressFamily.InterNetworkV6)
+				{
+					_udpSocketv4.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.HopLimit, value);
+				}
+				else
+				{
+					_udpSocketv4.Ttl = value;
+				}
+#endif
 			}
 		}
 
-		public NetSocket(NetManager.OnMessageReceived onMessageReceived)
+		static NetSocket()
 		{
-			_onMessageReceived = onMessageReceived;
+#if DISABLE_IPV6 || (!UNITY_EDITOR && ENABLE_IL2CPP && !UNITY_2018_3_OR_NEWER)
+            IPv6Support = false;
+#elif !UNITY_2019_1_OR_NEWER && !UNITY_2018_4_OR_NEWER && (!UNITY_EDITOR && ENABLE_IL2CPP && UNITY_2018_3_OR_NEWER)
+            string version = UnityEngine.Application.unityVersion;
+            IPv6Support = Socket.OSSupportsIPv6 && int.Parse(version.Remove(version.IndexOf('f')).Split('.')[2]) >= 6;
+#elif UNITY_2018_2_OR_NEWER
+			IPv6Support = Socket.OSSupportsIPv6;
+#elif UNITY
+#pragma warning disable 618
+            IPv6Support = Socket.SupportsIPv6;
+#pragma warning restore 618
+#else
+            IPv6Support = Socket.OSSupportsIPv6;
+#endif
+		}
+
+		public NetSocket(NetManager listener)
+		{
+			_listener = listener;
+		}
+
+		private bool IsActive()
+		{
+#if UNITY_IOS && !UNITY_EDITOR
+            var unitySocketFix = _unitySocketFix; //save for multithread
+            if (unitySocketFix != null && unitySocketFix.Paused)
+                return false;
+#endif
+			return IsRunning;
+		}
+
+		private bool ProcessError(SocketException ex, EndPoint bufferEndPoint)
+		{
+			switch (ex.SocketErrorCode)
+			{
+#if UNITY_IOS && !UNITY_EDITOR
+                case SocketError.NotConnected:
+#endif
+				case SocketError.Interrupted:
+				case SocketError.NotSocket:
+					return true;
+				case SocketError.ConnectionReset:
+				case SocketError.MessageSize:
+				case SocketError.TimedOut:
+					NetDebug.Write(NetLogLevel.Trace, "[R]Ignored error: {0} - {1}",
+						(int)ex.SocketErrorCode, ex.ToString());
+					break;
+				default:
+					NetDebug.WriteError("[R]Error code: {0} - {1}", (int)ex.SocketErrorCode,
+						ex.ToString());
+					_listener.OnMessageReceived(null, ex.SocketErrorCode, (IPEndPoint)bufferEndPoint);
+					break;
+			}
+			return false;
+		}
+
+		public void ManualReceive()
+		{
+			ManualReceive(_udpSocketv4, _bufferEndPointv4);
+			if (_udpSocketv6 != null && _udpSocketv6 != _udpSocketv4)
+			{
+				ManualReceive(_udpSocketv6, _bufferEndPointv6);
+			}
+		}
+
+		private bool ManualReceive(Socket socket, EndPoint bufferEndPoint)
+		{
+			//Reading data
+			try
+			{
+				int available = socket.Available;
+				if (available == 0)
+				{
+					return false;
+				}
+
+				while (available > 0)
+				{
+					var packet = _listener.NetPacketPool.GetPacket(NetConstants.MaxPacketSize);
+					packet.Size = socket.ReceiveFrom(packet.RawData, 0, NetConstants.MaxPacketSize, SocketFlags.None,
+						ref bufferEndPoint);
+					NetDebug.Write(NetLogLevel.Trace, "[R]Received data from {0}, result: {1}", bufferEndPoint.ToString(), packet.Size);
+					_listener.OnMessageReceived(packet, 0, (IPEndPoint)bufferEndPoint);
+					available -= packet.Size;
+				}
+			}
+			catch (SocketException ex)
+			{
+				return ProcessError(ex, bufferEndPoint);
+			}
+			catch (ObjectDisposedException)
+			{
+				return true;
+			}
+			return false;
 		}
 
 		private void ReceiveLogic(object state)
 		{
 			var socket = (Socket)state;
 			EndPoint bufferEndPoint = new IPEndPoint(socket.AddressFamily == AddressFamily.InterNetwork ? IPAddress.Any : IPAddress.IPv6Any, 0);
-			var bufferNetEndPoint = new NetEndPoint((IPEndPoint)bufferEndPoint);
-			byte[] receiveBuffer = new byte[NetConstants.PacketSizeLimit];
 
-			while (_running)
+			while (IsActive())
 			{
-				//wait for data
-				if (!socket.Poll(SocketReceivePollTime, SelectMode.SelectRead))
-				{
-					continue;
-				}
-
-				int result;
+				NetPacket packet;
 
 				//Reading data
 				try
 				{
-					result = socket.ReceiveFrom(receiveBuffer, 0, receiveBuffer.Length, SocketFlags.None, ref bufferEndPoint);
-					if (!bufferNetEndPoint.EndPoint.Equals(bufferEndPoint))
+					if (socket.Available == 0 && !socket.Poll(ReceivePollingTime, SelectMode.SelectRead))
 					{
-						bufferNetEndPoint = new NetEndPoint((IPEndPoint)bufferEndPoint);
+						continue;
 					}
+
+					packet = _listener.NetPacketPool.GetPacket(NetConstants.MaxPacketSize);
+					packet.Size = socket.ReceiveFrom(packet.RawData, 0, NetConstants.MaxPacketSize, SocketFlags.None,
+						ref bufferEndPoint);
 				}
 				catch (SocketException ex)
 				{
-					if (ex.SocketErrorCode == SocketError.ConnectionReset ||
-						ex.SocketErrorCode == SocketError.MessageSize)
+					if (ProcessError(ex, bufferEndPoint))
 					{
-						//10040 - message too long
-						//10054 - remote close (not error)
-						//Just UDP
-						NetUtils.DebugWrite(ConsoleColor.DarkRed, "[R] Ingored error: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString());
-						continue;
+						return;
 					}
-					NetUtils.DebugWriteError("[R]Error code: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString());
-					_onMessageReceived(null, 0, (int)ex.SocketErrorCode, bufferNetEndPoint);
+
 					continue;
+				}
+				catch (ObjectDisposedException)
+				{
+					return;
 				}
 
 				//All ok!
-				NetUtils.DebugWrite(ConsoleColor.Blue, "[R]Recieved data from {0}, result: {1}", bufferNetEndPoint.ToString(), result);
-				_onMessageReceived(receiveBuffer, result, 0, bufferNetEndPoint);
+				NetDebug.Write(NetLogLevel.Trace, "[R]Received data from {0}, result: {1}", bufferEndPoint.ToString(), packet.Size);
+				_listener.OnMessageReceived(packet, 0, (IPEndPoint)bufferEndPoint);
 			}
 		}
 
-		public bool Bind(int port, bool reuseAddress)
+		public bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool reuseAddress, IPv6Mode ipv6Mode, bool manualMode)
 		{
-			_udpSocketv4 = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
-			{
-				Blocking = false,
-				ReceiveBufferSize = NetConstants.SocketBufferSize,
-				SendBufferSize = NetConstants.SocketBufferSize
-			};
-			_udpSocketv4.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.IpTimeToLive, NetConstants.SocketTTL);
-			if (reuseAddress)
-			{
-				_udpSocketv4.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-			}
-#if !NETCORE
-			_udpSocketv4.DontFragment = true;
-#endif
-
-			try
-			{
-				_udpSocketv4.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Broadcast, 1);
-			}
-			catch (SocketException e)
-			{
-				NetUtils.DebugWriteError("Broadcast error: {0}", e.ToString());
-			}
-
-			if (!BindSocket(_udpSocketv4, new IPEndPoint(IPAddress.Any, port)))
+			if (IsActive())
 			{
 				return false;
 			}
-			_localEndPoint = new NetEndPoint((IPEndPoint)_udpSocketv4.LocalEndPoint);
 
-			_running = true;
-			_threadv4 = new Thread(ReceiveLogic)
+			bool dualMode = ipv6Mode == IPv6Mode.DualMode && IPv6Support;
+
+			_udpSocketv4 = new Socket(
+				dualMode ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork,
+				SocketType.Dgram,
+				ProtocolType.Udp);
+
+			if (!BindSocket(_udpSocketv4, new IPEndPoint(dualMode ? addressIPv6 : addressIPv4, port), reuseAddress, ipv6Mode))
 			{
-				Name = "SocketThreadv4(" + port + ")",
-				IsBackground = true
-			};
-			_threadv4.Start(_udpSocketv4);
+				return false;
+			}
+
+			LocalPort = ((IPEndPoint)_udpSocketv4.LocalEndPoint).Port;
+
+#if UNITY_IOS && !UNITY_EDITOR
+            if (_unitySocketFix == null)
+            {
+                var unityFixObj = new GameObject("LiteNetLib_UnitySocketFix");
+                GameObject.DontDestroyOnLoad(unityFixObj);
+                _unitySocketFix = unityFixObj.AddComponent<UnitySocketFix>();
+                _unitySocketFix.Socket = this;
+                _unitySocketFix.BindAddrIPv4 = addressIPv4;
+                _unitySocketFix.BindAddrIPv6 = addressIPv6;
+                _unitySocketFix.Reuse = reuseAddress;
+                _unitySocketFix.Port = LocalPort;
+                _unitySocketFix.IPv6 = ipv6Mode;
+                _unitySocketFix.ManualMode = manualMode;
+            }
+            else
+            {
+                _unitySocketFix.Paused = false;
+            }
+#endif
+			if (dualMode)
+			{
+				_udpSocketv6 = _udpSocketv4;
+			}
+
+			IsRunning = true;
+			if (!manualMode)
+			{
+				_threadv4 = new Thread(ReceiveLogic)
+				{
+					Name = "SocketThreadv4(" + LocalPort + ")",
+					IsBackground = true
+				};
+				_threadv4.Start(_udpSocketv4);
+			}
+			else
+			{
+				_bufferEndPointv4 = new IPEndPoint(IPAddress.Any, 0);
+			}
 
 			//Check IPv6 support
-			if (!IPv6Support)
+			if (!IPv6Support || ipv6Mode != IPv6Mode.SeparateSocket)
 			{
 				return true;
 			}
 
+			_udpSocketv6 = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp);
 			//Use one port for two sockets
-			port = _localEndPoint.Port;
-
-			_udpSocketv6 = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp)
+			if (BindSocket(_udpSocketv6, new IPEndPoint(addressIPv6, LocalPort), reuseAddress, ipv6Mode))
 			{
-				Blocking = false,
-				ReceiveBufferSize = NetConstants.SocketBufferSize,
-				SendBufferSize = NetConstants.SocketBufferSize
-			};
-			if (reuseAddress)
-			{
-				_udpSocketv6.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-			}
-
-			if (BindSocket(_udpSocketv6, new IPEndPoint(IPAddress.IPv6Any, port)))
-			{
-				_localEndPoint = new NetEndPoint((IPEndPoint)_udpSocketv6.LocalEndPoint);
-
-				try
+				if (manualMode)
 				{
-					_udpSocketv6.SetSocketOption(
-						SocketOptionLevel.IPv6,
-						SocketOptionName.AddMembership,
-						new IPv6MulticastOption(MulticastAddressV6));
+					_bufferEndPointv6 = new IPEndPoint(IPAddress.IPv6Any, 0);
 				}
-				catch (Exception)
+				else
 				{
-					// Unity3d throws exception - ignored
+					_threadv6 = new Thread(ReceiveLogic)
+					{
+						Name = "SocketThreadv6(" + LocalPort + ")",
+						IsBackground = true
+					};
+					_threadv6.Start(_udpSocketv6);
 				}
 
-				_threadv6 = new Thread(ReceiveLogic)
-				{
-					Name = "SocketThreadv6(" + port + ")",
-					IsBackground = true
-				};
-				_threadv6.Start(_udpSocketv6);
 			}
 
 			return true;
 		}
 
-		private bool BindSocket(Socket socket, IPEndPoint ep)
+		private bool BindSocket(Socket socket, IPEndPoint ep, bool reuseAddress, IPv6Mode ipv6Mode)
 		{
+			//Setup socket
+			socket.ReceiveTimeout = 500;
+			socket.SendTimeout = 500;
+			socket.ReceiveBufferSize = NetConstants.SocketBufferSize;
+			socket.SendBufferSize = NetConstants.SocketBufferSize;
+#if !UNITY || UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+#if NETSTANDARD || NETCOREAPP
+            if(RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+#endif
+			try
+			{
+				socket.IOControl(SioUdpConnreset, new byte[] { 0 }, null);
+			}
+			catch
+			{
+				//ignored
+			}
+#endif
+
+			try
+			{
+				socket.ExclusiveAddressUse = !reuseAddress;
+				socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, reuseAddress);
+			}
+			catch
+			{
+				//Unity with IL2CPP throws an exception here, it doesn't matter in most cases so just ignore it
+			}
+			if (socket.AddressFamily == AddressFamily.InterNetwork)
+			{
+				Ttl = NetConstants.SocketTTL;
+
+#if NETSTANDARD || NETCOREAPP
+                if(!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+#endif
+				try
+				{ socket.DontFragment = true; }
+				catch (SocketException e)
+				{
+					NetDebug.WriteError("[B]DontFragment error: {0}", e.SocketErrorCode);
+				}
+
+				try
+				{ socket.EnableBroadcast = true; }
+				catch (SocketException e)
+				{
+					NetDebug.WriteError("[B]Broadcast error: {0}", e.SocketErrorCode);
+				}
+			}
+			else //IPv6 specific
+			{
+				if (ipv6Mode == IPv6Mode.DualMode)
+				{
+					try
+					{
+						//Disable IPv6 only mode
+						socket.SetSocketOption(SocketOptionLevel.IPv6, (SocketOptionName)27, false);
+					}
+					catch (Exception e)
+					{
+						NetDebug.WriteError("[B]Bind exception (dualmode setting): {0}", e.ToString());
+					}
+				}
+			}
+
+			//Bind
 			try
 			{
 				socket.Bind(ep);
-				NetUtils.DebugWrite(ConsoleColor.Blue, "[B]Succesfully binded to port: {0}", ((IPEndPoint)socket.LocalEndPoint).Port);
-			}
-			catch (SocketException ex)
-			{
-				NetUtils.DebugWriteError("[B]Bind exception: {0}", ex.ToString());
-				//TODO: very temporary hack for iOS (Unity3D)
-				if (ex.SocketErrorCode == SocketError.AddressFamilyNotSupported)
+				NetDebug.Write(NetLogLevel.Trace, "[B]Successfully binded to port: {0}", ((IPEndPoint)socket.LocalEndPoint).Port);
+
+				//join multicast
+				if (socket.AddressFamily == AddressFamily.InterNetworkV6)
 				{
-					return true;
+					try
+					{
+#if !UNITY
+                        socket.SetSocketOption(
+                            SocketOptionLevel.IPv6,
+                            SocketOptionName.AddMembership,
+                            new IPv6MulticastOption(MulticastAddressV6));
+#endif
+					}
+					catch (Exception)
+					{
+						// Unity3d throws exception - ignored
+					}
 				}
+			}
+			catch (SocketException bindException)
+			{
+				switch (bindException.SocketErrorCode)
+				{
+					//IPv6 bind fix
+					case SocketError.AddressAlreadyInUse:
+						if (socket.AddressFamily == AddressFamily.InterNetworkV6 && ipv6Mode != IPv6Mode.DualMode)
+						{
+							try
+							{
+								//Set IPv6Only
+								socket.SetSocketOption(SocketOptionLevel.IPv6, (SocketOptionName)27, true);
+								socket.Bind(ep);
+							}
+#if UNITY_2018_3_OR_NEWER
+							catch (SocketException ex)
+							{
+
+								//because its fixed in 2018_3
+								NetDebug.WriteError("[B]Bind exception: {0}, errorCode: {1}", ex.ToString(), ex.SocketErrorCode);
+#else
+                            catch(SocketException)
+                            {
+#endif
+								return false;
+							}
+							return true;
+						}
+						break;
+					//hack for iOS (Unity3D)
+					case SocketError.AddressFamilyNotSupported:
+						return true;
+				}
+				NetDebug.WriteError("[B]Bind exception: {0}, errorCode: {1}", bindException.ToString(), bindException.SocketErrorCode);
 				return false;
 			}
 			return true;
@@ -200,280 +473,123 @@ namespace FlyingWormConsole3.LiteNetLib
 
 		public bool SendBroadcast(byte[] data, int offset, int size, int port)
 		{
+			if (!IsActive())
+			{
+				return false;
+			}
+
+			bool broadcastSuccess = false;
+			bool multicastSuccess = false;
 			try
 			{
-				int result = _udpSocketv4.SendTo(data, offset, size, SocketFlags.None, new IPEndPoint(IPAddress.Broadcast, port));
-				if (result <= 0)
-				{
-					return false;
-				}
+				broadcastSuccess = _udpSocketv4.SendTo(
+							 data,
+							 offset,
+							 size,
+							 SocketFlags.None,
+							 new IPEndPoint(IPAddress.Broadcast, port)) > 0;
 
-				if (IPv6Support)
+				if (_udpSocketv6 != null)
 				{
-					result = _udpSocketv6.SendTo(data, offset, size, SocketFlags.None, new IPEndPoint(MulticastAddressV6, port));
-					if (result <= 0)
-					{
-						return false;
-					}
+					multicastSuccess = _udpSocketv6.SendTo(
+												data,
+												offset,
+												size,
+												SocketFlags.None,
+												new IPEndPoint(MulticastAddressV6, port)) > 0;
 				}
 			}
 			catch (Exception ex)
 			{
-				NetUtils.DebugWriteError("[S][MCAST]" + ex);
-				return false;
+				NetDebug.WriteError("[S][MCAST]" + ex);
+				return broadcastSuccess;
 			}
-			return true;
+			return broadcastSuccess || multicastSuccess;
 		}
 
-		public int SendTo(byte[] data, int offset, int size, NetEndPoint remoteEndPoint, ref int errorCode)
+		public int SendTo(byte[] data, int offset, int size, IPEndPoint remoteEndPoint, ref SocketError errorCode)
 		{
+			if (!IsActive())
+			{
+				return 0;
+			}
+
 			try
 			{
-				int result = 0;
-				if (remoteEndPoint.EndPoint.AddressFamily == AddressFamily.InterNetwork)
+				var socket = _udpSocketv4;
+				if (remoteEndPoint.AddressFamily == AddressFamily.InterNetworkV6 && IPv6Support)
 				{
-					if (!_udpSocketv4.Poll(SocketSendPollTime, SelectMode.SelectWrite))
-					{
-						return -1;
-					}
-
-					result = _udpSocketv4.SendTo(data, offset, size, SocketFlags.None, remoteEndPoint.EndPoint);
-				}
-				else if (IPv6Support)
-				{
-					if (!_udpSocketv6.Poll(SocketSendPollTime, SelectMode.SelectWrite))
-					{
-						return -1;
-					}
-
-					result = _udpSocketv6.SendTo(data, offset, size, SocketFlags.None, remoteEndPoint.EndPoint);
+					socket = _udpSocketv6;
 				}
 
-				NetUtils.DebugWrite(ConsoleColor.Blue, "[S]Send packet to {0}, result: {1}", remoteEndPoint.EndPoint, result);
+				int result = socket.SendTo(data, offset, size, SocketFlags.None, remoteEndPoint);
+				NetDebug.Write(NetLogLevel.Trace, "[S]Send packet to {0}, result: {1}", remoteEndPoint, result);
 				return result;
 			}
 			catch (SocketException ex)
 			{
-				if (ex.SocketErrorCode != SocketError.MessageSize)
+				switch (ex.SocketErrorCode)
 				{
-					NetUtils.DebugWriteError("[S]" + ex);
+					case SocketError.NoBufferSpaceAvailable:
+					case SocketError.Interrupted:
+						return 0;
+					case SocketError.MessageSize: //do nothing              
+						break;
+					default:
+						NetDebug.WriteError("[S]" + ex);
+						break;
 				}
-
-				errorCode = (int)ex.SocketErrorCode;
+				errorCode = ex.SocketErrorCode;
 				return -1;
 			}
 			catch (Exception ex)
 			{
-				NetUtils.DebugWriteError("[S]" + ex);
+				NetDebug.WriteError("[S]" + ex);
 				return -1;
 			}
 		}
 
-		private void CloseSocket(Socket s)
+		public void Close(bool suspend)
 		{
-#if NETCORE
-            s.Dispose();
-#else
-			s.Close();
+			if (!suspend)
+			{
+				IsRunning = false;
+#if UNITY_IOS && !UNITY_EDITOR
+                _unitySocketFix.Socket = null;
+                _unitySocketFix = null;
 #endif
-		}
+			}
+			//cleanup dual mode
+			if (_udpSocketv4 == _udpSocketv6)
+			{
+				_udpSocketv6 = null;
+			}
 
-		public void Close()
-		{
-			_running = false;
+			if (_udpSocketv4 != null)
+			{
+				_udpSocketv4.Close();
+			}
 
-			//Close IPv4
-			if (Thread.CurrentThread != _threadv4)
+			if (_udpSocketv6 != null)
+			{
+				_udpSocketv6.Close();
+			}
+
+			_udpSocketv4 = null;
+			_udpSocketv6 = null;
+
+			if (_threadv4 != null && _threadv4 != Thread.CurrentThread)
 			{
 				_threadv4.Join();
 			}
-			_threadv4 = null;
-			if (_udpSocketv4 != null)
-			{
-				CloseSocket(_udpSocketv4);
-				_udpSocketv4 = null;
-			}
 
-			//No ipv6
-			if (_udpSocketv6 == null)
-			{
-				return;
-			}
-
-			//Close IPv6
-			if (Thread.CurrentThread != _threadv6)
+			if (_threadv6 != null && _threadv6 != Thread.CurrentThread)
 			{
 				_threadv6.Join();
 			}
+
+			_threadv4 = null;
 			_threadv6 = null;
-			if (_udpSocketv6 != null)
-			{
-				CloseSocket(_udpSocketv6);
-				_udpSocketv6 = null;
-			}
 		}
 	}
 }
-#else
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Runtime.InteropServices.WindowsRuntime;
-using System.Threading;
-using System.Threading.Tasks;
-using Windows.Networking;
-using Windows.Networking.Sockets;
-using Windows.Storage.Streams;
-
-namespace FlyingWormConsole3.LiteNetLib
-{
-    internal sealed class NetSocket
-    {
-        private DatagramSocket _datagramSocket;
-        private readonly Dictionary<NetEndPoint, IOutputStream> _peers = new Dictionary<NetEndPoint, IOutputStream>();
-        private readonly NetManager.OnMessageReceived _onMessageReceived;
-        private readonly byte[] _byteBuffer = new byte[NetConstants.PacketSizeLimit];
-        private readonly IBuffer _buffer;
-        private NetEndPoint _bufferEndPoint;
-        private NetEndPoint _localEndPoint;
-        private static readonly HostName BroadcastAddress = new HostName("255.255.255.255");
-        private static readonly HostName MulticastAddressV6 = new HostName(NetConstants.MulticastGroupIPv6);
-
-        public NetEndPoint LocalEndPoint
-        {
-            get { return _localEndPoint; }
-        }
-
-        public NetSocket(NetManager.OnMessageReceived onMessageReceived)
-        {
-            _onMessageReceived = onMessageReceived;
-            _buffer = _byteBuffer.AsBuffer();
-        }
-        
-        private void OnMessageReceived(DatagramSocket sender, DatagramSocketMessageReceivedEventArgs args)
-        {
-            var result = args.GetDataStream().ReadAsync(_buffer, _buffer.Capacity, InputStreamOptions.None).AsTask().Result;
-            int length = (int)result.Length;
-            if (length <= 0)
-                return;
-
-            if (_bufferEndPoint == null ||
-                !_bufferEndPoint.HostName.IsEqual(args.RemoteAddress) ||
-                !_bufferEndPoint.PortStr.Equals(args.RemotePort))
-            {
-                _bufferEndPoint = new NetEndPoint(args.RemoteAddress, args.RemotePort);
-            }
-            _onMessageReceived(_byteBuffer, length, 0, _bufferEndPoint);
-        }
-
-        public bool Bind(int port, bool reuseAddress)
-        {
-            _datagramSocket = new DatagramSocket();
-            _datagramSocket.Control.InboundBufferSizeInBytes = NetConstants.SocketBufferSize;
-            _datagramSocket.Control.DontFragment = true;
-            _datagramSocket.Control.OutboundUnicastHopLimit = NetConstants.SocketTTL;
-            _datagramSocket.MessageReceived += OnMessageReceived;
-
-            try
-            {
-                _datagramSocket.BindServiceNameAsync(port.ToString()).AsTask().Wait();
-                _datagramSocket.JoinMulticastGroup(MulticastAddressV6);
-                _localEndPoint = new NetEndPoint(_datagramSocket.Information.LocalAddress, _datagramSocket.Information.LocalPort);
-            }
-            catch (Exception ex)
-            {
-                NetUtils.DebugWriteError("[B]Bind exception: {0}", ex.ToString());
-                return false;
-            }
-            return true;
-        }
-
-        public bool SendBroadcast(byte[] data, int offset, int size, int port)
-        {
-            var portString = port.ToString();
-            try
-            {
-                var outputStream =
-                    _datagramSocket.GetOutputStreamAsync(BroadcastAddress, portString)
-                        .AsTask()
-                        .Result;
-                var writer = outputStream.AsStreamForWrite();
-                writer.Write(data, offset, size);
-                writer.Flush();
-
-                outputStream =
-                    _datagramSocket.GetOutputStreamAsync(MulticastAddressV6, portString)
-                        .AsTask()
-                        .Result;
-                writer = outputStream.AsStreamForWrite();
-                writer.Write(data, offset, size);
-                writer.Flush();
-            }
-            catch (Exception ex)
-            {
-                NetUtils.DebugWriteError("[S][MCAST]" + ex);
-                return false;
-            }
-            return true;
-        }
-
-        public int SendTo(byte[] data, int offset, int length, NetEndPoint remoteEndPoint, ref int errorCode)
-        {
-            Task<uint> task = null;
-            try
-            {
-                IOutputStream writer;
-                if (!_peers.TryGetValue(remoteEndPoint, out writer))
-                {
-                    writer =
-                        _datagramSocket.GetOutputStreamAsync(remoteEndPoint.HostName, remoteEndPoint.PortStr)
-                            .AsTask()
-                            .Result;
-                    _peers.Add(remoteEndPoint, writer);
-                }
-
-                task = writer.WriteAsync(data.AsBuffer(offset, length)).AsTask();
-                return (int)task.Result;
-            }
-            catch (Exception ex)
-            {
-                if (task?.Exception?.InnerExceptions != null)
-                {
-                    ex = task.Exception.InnerException;
-                }
-                var errorStatus = SocketError.GetStatus(ex.HResult);
-                switch (errorStatus)
-                {
-                    case SocketErrorStatus.MessageTooLong:
-                        errorCode = 10040;
-                        break;
-                    default:
-                        errorCode = (int)errorStatus;
-                        NetUtils.DebugWriteError("[S " + errorStatus + "(" + errorCode + ")]" + ex);
-                        break;
-                }
-                
-                return -1;
-            }
-        }
-
-        internal void RemovePeer(NetEndPoint ep)
-        {
-            _peers.Remove(ep);
-        }
-
-        public void Close()
-        {
-            _datagramSocket.Dispose();
-            _datagramSocket = null;
-            ClearPeers();
-        }
-
-        internal void ClearPeers()
-        {
-            _peers.Clear();
-        }
-    }
-}
-#endif
-#endif

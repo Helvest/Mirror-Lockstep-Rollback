@@ -1,38 +1,13 @@
 using Mirror;
-using Helvest.Framework;
-using GameMode;
+using UnityEngine;
 
 public class CustomNetworkManager : RollbackNetworkManager
 {
 
-	#region Variables
+	#region Fields
 
-	private GameManager _gameManager;
-
-	#endregion
-
-	#region Awake
-
-	public override void Awake()
-	{
-		SL.TryGetOrFindComponent(out _gameManager);
-
-		base.Awake();
-	}
-
-	#endregion
-
-	#region OnEnable OnDisable
-
-	private void OnEnable()
-	{
-		SL.AddOrDestroy(this);
-	}
-
-	private void OnDisable()
-	{
-		SL.Remove(this);
-	}
+	[field: SerializeField, Header("Custom")]
+	protected MonoTypeMachine TM { get; private set; } = default;
 
 	#endregion
 
@@ -42,14 +17,14 @@ public class CustomNetworkManager : RollbackNetworkManager
 	{
 		base.OnStartServer();
 
-		_gameManager.SetState<Match>();
+		TM.SetState<Match>();
 	}
 
 	public override void OnStartClient()
 	{
 		base.OnStartClient();
 
-		_gameManager.SetState<Match>();
+		TM.SetState<Match>();
 	}
 
 	#endregion
@@ -60,14 +35,14 @@ public class CustomNetworkManager : RollbackNetworkManager
 	{
 		base.OnStopServer();
 
-		_gameManager.SetState<Menu>();
+		TM.SetState<Menu>();
 	}
 
 	public override void OnStopClient()
 	{
 		base.OnStopClient();
 
-		_gameManager.SetState<Menu>();
+		TM.SetState<Menu>();
 	}
 
 	#endregion

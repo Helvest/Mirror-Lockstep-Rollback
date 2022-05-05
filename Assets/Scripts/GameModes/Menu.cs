@@ -1,22 +1,7 @@
-﻿using Helvest.Framework;
+﻿using UnityEngine;
 
-namespace GameMode
+public class Menu : MonoBehaviour
 {
-	public class Menu : GameModeBase
-	{
-		public override void EnterState()
-		{
-			base.EnterState();
-		}
 
-		public override void ExitState()
-		{
-			base.ExitState();
-		}
-
-		public override void UpdateState()
-		{
-
-		}
-	}
 }
+

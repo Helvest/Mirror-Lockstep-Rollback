@@ -1,13 +1,17 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using System;
 using Object = UnityEngine.Object;
-using Mirror;
 
 //Add to NetworkConnection
 //public RollbackState rollbackState = RollbackState.NotObserving;
 //public bool isFirstSpawn = false;
+//public readonly List<NetworkIdentity> newObserving = new List<NetworkIdentity>();
+//NetworkConnection.AddToObserving(NetworkIdentity netIdentity)
+//Replace observing.Add(netIdentity);
+//By newObserving.Add(netIdentity);
+//remove NetworkServer.ShowForConnection(netIdentity, this);
 
 //Add to NetworkIdentity
 //public bool useRollback = false; 
@@ -25,13 +29,6 @@ using Mirror;
 //Replace RegisterHandler<SpawnMessage>(OnEntityStateMessage);
 //By RegisterHandler<SpawnMessage>(Rollback.OnEntityStateMessage);
 
-//Add to NetworkConnection
-//public readonly List<NetworkIdentity> newObserving = new List<NetworkIdentity>();
-
-//NetworkConnection.AddToObserving(NetworkIdentity netIdentity)
-//Replace observing.Add(netIdentity);
-//By newObserving.Add(netIdentity);
-//remove NetworkServer.ShowForConnection(netIdentity, this);
 
 namespace Mirror
 {
@@ -61,7 +58,7 @@ namespace Mirror
 
 		public ObjectData(SpawnMessage message)
 		{
-			var data = message.payload.ToArray();
+			byte[] data = message.payload.ToArray();
 			message.payload = new ArraySegment<byte>(data);
 
 			Message = message;
@@ -74,7 +71,7 @@ namespace Mirror
 
 		public ObjectDeltaData(EntityStateMessage message)
 		{
-			var data = message.payload.ToArray();
+			byte[] data = message.payload.ToArray();
 			message.payload = new ArraySegment<byte>(data);
 
 			Message = message;
@@ -151,6 +148,7 @@ namespace Mirror
 		}
 
 		#endregion
+
 	}
 
 	#endregion
@@ -199,7 +197,7 @@ namespace Mirror
 
 		public void FinishConstruction()
 		{
-			var frame = inConstruction.rollbackData.fixedFrameCount;
+			uint frame = inConstruction.rollbackData.fixedFrameCount;
 
 			if (futurs.TryGetValue(frame, out var lockstep))
 			{
@@ -254,7 +252,7 @@ namespace Mirror
 
 		#endregion
 
-		#region Variables
+		#region Fields
 
 		public bool isPhysicUpdated;
 		public double timeAtSimulation;
@@ -293,13 +291,9 @@ namespace Mirror
 
 		public static RollbackMode rollbackMode = default;
 
-		public static bool sendConfigMessage = false;
-
 		#region NetworkMessage
 
-		public interface LockstepMessage : NetworkMessage { }
-
-		public struct ConfigLockstepMessage : LockstepMessage
+		public struct ConfigLockstepMessage : NetworkMessage
 		{
 			public bool isFirst;
 			public RollbackMode rollbackMode;
@@ -311,7 +305,7 @@ namespace Mirror
 			public uint presentFrame;
 		}
 
-		public struct DeltaLockstepMessage : LockstepMessage
+		public struct DeltaLockstepMessage : NetworkMessage
 		{
 			public double timeAtSimulation;
 			public double normalTime;
@@ -320,7 +314,7 @@ namespace Mirror
 			public uint presentFrame;
 		}
 
-		public struct FullLockstepMessage : LockstepMessage
+		public struct FullLockstepMessage : NetworkMessage
 		{
 			public double timeAtSimulation;
 			public double normalTime;
@@ -328,13 +322,13 @@ namespace Mirror
 			public uint presentFrame;
 		}
 
-		public struct EndLockstepMessage : LockstepMessage { }
+		public struct EndLockstepMessage : NetworkMessage { }
 
 		#endregion
 
 		#region Lockstep
 
-		public readonly static ClientMemory clientMemory = new ClientMemory();
+		public static readonly ClientMemory clientMemory = new ClientMemory();
 
 		/*
 		public static bool TryGetObjectData(NetworkIdentity networkIdentity, out ObjectData objectData)
@@ -379,7 +373,7 @@ namespace Mirror
 			//Is First Message
 			if (message.isFirst)
 			{
-				var startFrame = message.presentFrame;
+				uint startFrame = message.presentFrame;
 
 				Debug.Log("FIRST ConfigLockstep receive: " + startFrame);
 
@@ -404,7 +398,9 @@ namespace Mirror
 			clientMemory.StartConstruction(data);
 
 			if (message.isFirst)
+			{
 				clientMemory.rollbackData.Copy(data);
+			}
 
 			if (message.pastFrame < clientMemory.firstFrame)
 			{
@@ -495,32 +491,31 @@ namespace Mirror
 
 		public static SpawnMessage GetSpawnMessageOnClient(this NetworkIdentity identity)
 		{
-			using (PooledNetworkWriter ownerWriter = NetworkWriterPool.GetWriter(), observersWriter = NetworkWriterPool.GetWriter())
+			using NetworkWriterPooled ownerWriter = NetworkWriterPool.Get(), observersWriter = NetworkWriterPool.Get();
+
+			var conn = identity.connectionToServer;
+
+			//bool isOwner = identity.connectionToClient == conn;
+
+			var payload = NetworkServer.CreateSpawnMessagePayload(false, identity, ownerWriter, observersWriter);
+
+			var transform = identity.transform;
+
+			var message = new SpawnMessage
 			{
-				var conn = identity.connectionToServer;
+				netId = identity.netId,
+				isLocalPlayer = false,
+				isOwner = false,
+				sceneId = identity.sceneId,
+				assetId = identity.assetId,
+				// use local values for VR support
+				position = transform.localPosition,
+				rotation = transform.localRotation,
+				scale = transform.localScale,
+				payload = payload,
+			};
 
-				//bool isOwner = identity.connectionToClient == conn;
-
-				var payload = NetworkServer.CreateSpawnMessagePayload(false, identity, ownerWriter, observersWriter);
-
-				var transform = identity.transform;
-
-				var message = new SpawnMessage
-				{
-					netId = identity.netId,
-					isLocalPlayer = false,
-					isOwner = false,
-					sceneId = identity.sceneId,
-					assetId = identity.assetId,
-					// use local values for VR support
-					position = transform.localPosition,
-					rotation = transform.localRotation,
-					scale = transform.localScale,
-					payload = payload,
-				};
-
-				return message;
-			}
+			return message;
 		}
 
 		#endregion
@@ -535,10 +530,12 @@ namespace Mirror
 			{
 				bool save = false;
 
-				if (NetworkIdentity.spawned.TryGetValue(message.netId, out var netIdentity))
+				//Try get spawned netIdentity
+				if (NetworkClient.spawned.TryGetValue(message.netId, out var netIdentity))
 				{
 					save = netIdentity.useRollback;
 				}
+				//Try get prefab netIdentity
 				else if (NetworkClient.GetPrefab(message.assetId, out var gameObject))
 				{
 					if (gameObject.TryGetComponent(out netIdentity))
@@ -549,27 +546,19 @@ namespace Mirror
 
 				if (save)
 				{
-					ObjectData objectData = new ObjectData(message);
+					var objectData = new ObjectData(message);
 
 					clientMemory.inConstruction.ObjectDataDict.Add(message.netId, objectData);
 					return;
 				}
 			}
 
-			ApplyFirstSpawn(message);
-		}
-
-		public static void ApplyFirstSpawn(SpawnMessage message)
-		{
-			if (NetworkClient.FindOrSpawnObject(message, out var identity))
-			{
-				NetworkClient.ApplySpawnPayload(identity, message);
-			}
+			NetworkClient.OnSpawn(message);
 		}
 
 		public static void ApplySpawn(SpawnMessage message)
 		{
-			if (NetworkIdentity.spawned.TryGetValue(message.netId, out var identity))
+			if (NetworkClient.spawned.TryGetValue(message.netId, out var identity))
 			{
 				ApplySpawnPayloadOnClient(identity, message);
 			}
@@ -581,7 +570,7 @@ namespace Mirror
 					return;
 				}
 
-				identity = message.sceneId == 0 ? NetworkClient.SpawnPrefab(message) : NetworkClient.SpawnSceneObject(message);
+				identity = message.sceneId == 0 ? NetworkClient.SpawnPrefab(message) : NetworkClient.SpawnSceneObject(message.sceneId);
 
 				NetworkClient.ApplySpawnPayload(identity, message);
 			}
@@ -603,13 +592,9 @@ namespace Mirror
 			// (Count is 0 if there were no components)
 			if (message.payload.Count > 0)
 			{
-				using (var payloadReader = NetworkReaderPool.GetReader(message.payload))
-				{
-					identity.OnDeserializeAllSafely(payloadReader, true);
-				}
+				using var payloadReader = NetworkReaderPool.Get(message.payload);
+				identity.OnDeserializeAllSafely(reader: payloadReader, initialState: true);
 			}
-
-			//NetworkIdentity.spawned[message.netId] = identity;
 		}
 
 		#endregion
@@ -618,7 +603,7 @@ namespace Mirror
 
 		public static void OnEntityStateMessage(EntityStateMessage message)
 		{
-			NetworkIdentity.spawned.TryGetValue(message.netId, out var identity);
+			NetworkClient.spawned.TryGetValue(message.netId, out var identity);
 
 			if (!SaveEntityState(message, identity))
 			{
@@ -626,7 +611,7 @@ namespace Mirror
 			}
 		}
 
-		public static bool SaveEntityState(EntityStateMessage message, NetworkIdentity identity)
+		private static bool SaveEntityState(EntityStateMessage message, NetworkIdentity identity)
 		{
 			if (_isRecevingLockstep)
 			{
@@ -642,13 +627,13 @@ namespace Mirror
 			return false;
 		}
 
-		public static void ApplyEntityState(EntityStateMessage message)
+		private static void ApplyEntityState(EntityStateMessage message)
 		{
-			NetworkIdentity.spawned.TryGetValue(message.netId, out var identity);
+			NetworkClient.spawned.TryGetValue(message.netId, out var identity);
 			ApplyEntityState(message, identity);
 		}
 
-		public static void ApplyEntityState(EntityStateMessage message, NetworkIdentity identity)
+		private static void ApplyEntityState(EntityStateMessage message, NetworkIdentity identity)
 		{
 			if (identity == null)
 			{
@@ -658,7 +643,7 @@ namespace Mirror
 			}
 
 			//Apply delta
-			using (var networkReader = NetworkReaderPool.GetReader(message.payload))
+			using (var networkReader = NetworkReaderPool.Get(message.payload))
 			{
 				identity.OnDeserializeAllSafely(networkReader, false);
 			}
@@ -763,13 +748,13 @@ namespace Mirror
 			clientMemory.RemoveAllFutur();
 		}
 
-		private readonly static List<uint> _identityToRemove = new List<uint>();
+		private static readonly List<uint> _identityToRemove = new List<uint>();
 
-		public static void PrepareClientSceneForLockstep<T>(T identityList) where T : IEnumerable<uint>
+		private static void PrepareClientSceneForLockstep<T>(T identityList) where T : IEnumerable<uint>
 		{
 			_identityToRemove.Clear();
 
-			foreach (var pair in NetworkIdentity.spawned)
+			foreach (var pair in NetworkClient.spawned)
 			{
 				if (pair.Value.useRollback && !identityList.Contains(pair.Key))
 				{
@@ -778,14 +763,14 @@ namespace Mirror
 			}
 
 			//Clean scene by destroying not needed netId
-			foreach (var netId in _identityToRemove)
+			foreach (uint netId in _identityToRemove)
 			{
-				if (NetworkIdentity.spawned.TryGetValue(netId, out var identity))
+				if (NetworkClient.spawned.TryGetValue(netId, out var identity))
 				{
 					identity.OnStopClient();
 					NetworkClient.InvokeUnSpawnHandler(identity.assetId, identity.gameObject);
 					Object.Destroy(identity.gameObject);
-					NetworkIdentity.spawned.Remove(netId);
+					NetworkClient.spawned.Remove(netId);
 				}
 			}
 		}
@@ -794,7 +779,7 @@ namespace Mirror
 		{
 			_identityToRemove.Clear();
 
-			foreach (var pair in NetworkIdentity.spawned)
+			foreach (var pair in NetworkServer.spawned)
 			{
 				if (pair.Value.useRollback && !identityList.Contains(pair.Key))
 				{
@@ -803,9 +788,9 @@ namespace Mirror
 			}
 
 			//Clean scene by destroying not needed netId
-			foreach (var item in _identityToRemove)
+			foreach (uint item in _identityToRemove)
 			{
-				if (NetworkIdentity.spawned.TryGetValue(item, out var identity))
+				if (NetworkServer.spawned.TryGetValue(item, out var identity))
 				{
 					NetworkServer.Destroy(identity.gameObject);
 				}
@@ -825,7 +810,7 @@ namespace Mirror
 		{
 			//Debug.Log("CreatePresentLockStep");
 
-			foreach (var identity in NetworkIdentity.spawned.Values)
+			foreach (var identity in NetworkClient.spawned.Values)
 			{
 				if (identity.useRollback)
 				{
@@ -838,72 +823,29 @@ namespace Mirror
 
 		#endregion
 
-		#region NetworkServer
-
-		public readonly static List<NetworkConnection> newPlayerReadyForRollback = new List<NetworkConnection>();
-
-		public static void AddPlayerReadyForRollback(NetworkConnection networkConnection)
-		{
-			if (!newPlayerReadyForRollback.Contains(networkConnection))
-			{
-				newPlayerReadyForRollback.Add(networkConnection);
-			}
-		}
+		#region SendLockstepMessage
 
 		private static bool _broadcastLockstep = false;
 
-		public static void SendLockstepMessageToReadyToObserve<T1, T2>(IEnumerable<T1> connList, T2 lockstepMessage)
-			where T1 : NetworkConnection
-			where T2 : struct, LockstepMessage
-		{
-			foreach (var conn in connList)
-			{
-				if (conn.connectionId != 0 && conn.rollbackState == RollbackState.ReadyToObserve)
-				{
-					conn.Send(lockstepMessage);
-				}
-			}
-		}
 
-		public static void SendLockstepMessageToObserving<T1, T2>(IEnumerable<T1> connList, T2 lockstepMessage)
-			where T1 : NetworkConnection
-			where T2 : struct, LockstepMessage
-		{
-			foreach (var conn in connList)
-			{
-				if (conn.connectionId != 0 && conn.rollbackState == RollbackState.Observing)
-				{
-					conn.Send(lockstepMessage);
-				}
-			}
 
+		public static void BroacastNextLockstep()
+		{
 			_broadcastLockstep = true;
 		}
+
+		#endregion
 
 		#region Broadcast
 
 		public static void Broadcast()
 		{
-			// copy all connections into a helper collection so that
-			// OnTransportDisconnected can be called while iterating.
-			// -> OnTransportDisconnected removes from the collection
-			// -> which would throw 'can't modify while iterating' errors
-			// => see also: https://github.com/vis2k/Mirror/issues/2739
-			// (copy nonalloc)
-			// TODO remove this when we move to 'lite' transports with only
-			//      socket send/recv later.
 			NetworkServer.connectionsCopy.Clear();
 			NetworkServer.connections.Values.CopyTo(NetworkServer.connectionsCopy);
 
 			// go through all connections
 			foreach (var connection in NetworkServer.connectionsCopy)
 			{
-				// check for inactivity. disconnects if necessary.
-				if (NetworkServer.DisconnectIfInactive(connection))
-				{
-					continue;
-				}
-
 				// has this connection joined the world yet?
 				// for each READY connection:
 				//   pull in UpdateVarsMessage for each entity it observes
@@ -917,22 +859,10 @@ namespace Mirror
 				connection.Update();
 			}
 
-			// TODO we already clear the serialized component's dirty bits above
-			//      might as well clear everything???
-			//
-			// TODO this unfortunately means we still need to iterate ALL
-			//      spawned and not just the ones with observers. figure
-			//      out a way to get rid of this.
-			//
-			// TODO clear dirty bits when removing the last observer instead!
-			//      no need to do it for ALL entities ALL the time.
-			//
-			NetworkServer.ClearSpawnedDirtyBits();
-
 			_broadcastLockstep = false;
 		}
 
-		private static List<NetworkIdentity> _networkIdentities = new List<NetworkIdentity>();
+		private static readonly List<NetworkIdentity> _networkIdentities = new List<NetworkIdentity>();
 
 		private static void BroadcastToConnection(NetworkConnectionToClient connection)
 		{
@@ -1073,8 +1003,6 @@ namespace Mirror
 				connection.Send(new EndLockstepMessage());
 			}
 		}
-
-		#endregion
 
 		#endregion
 

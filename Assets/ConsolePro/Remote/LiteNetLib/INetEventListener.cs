@@ -1,30 +1,55 @@
-#if DEBUG && !UNITY_WP_8_1 && !UNITY_WSA
+using System.Net;
+using System.Net.Sockets;
 using FlyingWormConsole3.LiteNetLib.Utils;
 
 namespace FlyingWormConsole3.LiteNetLib
 {
+	/// <summary>
+	/// Type of message that you receive in OnNetworkReceiveUnconnected event
+	/// </summary>
 	public enum UnconnectedMessageType
 	{
-		Default,
-		DiscoveryRequest,
-		DiscoveryResponse
+		BasicMessage,
+		Broadcast
 	}
 
+	/// <summary>
+	/// Disconnect reason that you receive in OnPeerDisconnected event
+	/// </summary>
 	public enum DisconnectReason
 	{
-		SocketReceiveError,
 		ConnectionFailed,
 		Timeout,
-		SocketSendError,
+		HostUnreachable,
+		NetworkUnreachable,
 		RemoteConnectionClose,
-		DisconnectPeerCalled
+		DisconnectPeerCalled,
+		ConnectionRejected,
+		InvalidProtocol,
+		UnknownHost,
+		Reconnect,
+		PeerToPeerConnection
 	}
 
+	/// <summary>
+	/// Additional information about disconnection
+	/// </summary>
 	public struct DisconnectInfo
 	{
+		/// <summary>
+		/// Additional info why peer disconnected
+		/// </summary>
 		public DisconnectReason Reason;
-		public int SocketErrorCode;
-		public NetDataReader AdditionalData;
+
+		/// <summary>
+		/// Error code (if reason is SocketSendError or SocketReceiveError)
+		/// </summary>
+		public SocketError SocketErrorCode;
+
+		/// <summary>
+		/// Additional data that can be accessed (only if reason is RemoteConnectionClose)
+		/// </summary>
+		public NetPacketReader AdditionalData;
 	}
 
 	public interface INetEventListener
@@ -46,23 +71,24 @@ namespace FlyingWormConsole3.LiteNetLib
 		/// Network error (on send or receive)
 		/// </summary>
 		/// <param name="endPoint">From endPoint (can be null)</param>
-		/// <param name="socketErrorCode">Socket error code</param>
-		void OnNetworkError(NetEndPoint endPoint, int socketErrorCode);
+		/// <param name="socketError">Socket error</param>
+		void OnNetworkError(IPEndPoint endPoint, SocketError socketError);
 
 		/// <summary>
 		/// Received some data
 		/// </summary>
 		/// <param name="peer">From peer</param>
 		/// <param name="reader">DataReader containing all received data</param>
-		void OnNetworkReceive(NetPeer peer, NetDataReader reader);
+		/// <param name="deliveryMethod">Type of received packet</param>
+		void OnNetworkReceive(NetPeer peer, NetPacketReader reader, DeliveryMethod deliveryMethod);
 
 		/// <summary>
 		/// Received unconnected message
 		/// </summary>
 		/// <param name="remoteEndPoint">From address (IP and Port)</param>
 		/// <param name="reader">Message data</param>
-		/// <param name="messageType">Message type (simple, discovery request or responce)</param>
-		void OnNetworkReceiveUnconnected(NetEndPoint remoteEndPoint, NetDataReader reader, UnconnectedMessageType messageType);
+		/// <param name="messageType">Message type (simple, discovery request or response)</param>
+		void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType);
 
 		/// <summary>
 		/// Latency information updated
@@ -70,16 +96,44 @@ namespace FlyingWormConsole3.LiteNetLib
 		/// <param name="peer">Peer with updated latency</param>
 		/// <param name="latency">latency value in milliseconds</param>
 		void OnNetworkLatencyUpdate(NetPeer peer, int latency);
+
+		/// <summary>
+		/// On peer connection requested
+		/// </summary>
+		/// <param name="request">Request information (EndPoint, internal id, additional data)</param>
+		void OnConnectionRequest(ConnectionRequest request);
 	}
 
-	public class EventBasedNetListener : INetEventListener
+	public interface IDeliveryEventListener
+	{
+		/// <summary>
+		/// On reliable message delivered
+		/// </summary>
+		/// <param name="peer"></param>
+		/// <param name="userData"></param>
+		void OnMessageDelivered(NetPeer peer, object userData);
+	}
+
+	public interface INtpEventListener
+	{
+		/// <summary>
+		/// Ntp response
+		/// </summary>
+		/// <param name="packet"></param>
+		void OnNtpResponse(NtpPacket packet);
+	}
+
+	public class EventBasedNetListener : INetEventListener, IDeliveryEventListener, INtpEventListener
 	{
 		public delegate void OnPeerConnected(NetPeer peer);
 		public delegate void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo);
-		public delegate void OnNetworkError(NetEndPoint endPoint, int socketErrorCode);
-		public delegate void OnNetworkReceive(NetPeer peer, NetDataReader reader);
-		public delegate void OnNetworkReceiveUnconnected(NetEndPoint remoteEndPoint, NetDataReader reader, UnconnectedMessageType messageType);
+		public delegate void OnNetworkError(IPEndPoint endPoint, SocketError socketError);
+		public delegate void OnNetworkReceive(NetPeer peer, NetPacketReader reader, DeliveryMethod deliveryMethod);
+		public delegate void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType);
 		public delegate void OnNetworkLatencyUpdate(NetPeer peer, int latency);
+		public delegate void OnConnectionRequest(ConnectionRequest request);
+		public delegate void OnDeliveryEvent(NetPeer peer, object userData);
+		public delegate void OnNtpResponseEvent(NtpPacket packet);
 
 		public event OnPeerConnected PeerConnectedEvent;
 		public event OnPeerDisconnected PeerDisconnectedEvent;
@@ -87,6 +141,54 @@ namespace FlyingWormConsole3.LiteNetLib
 		public event OnNetworkReceive NetworkReceiveEvent;
 		public event OnNetworkReceiveUnconnected NetworkReceiveUnconnectedEvent;
 		public event OnNetworkLatencyUpdate NetworkLatencyUpdateEvent;
+		public event OnConnectionRequest ConnectionRequestEvent;
+		public event OnDeliveryEvent DeliveryEvent;
+		public event OnNtpResponseEvent NtpResponseEvent;
+
+		public void ClearPeerConnectedEvent()
+		{
+			PeerConnectedEvent = null;
+		}
+
+		public void ClearPeerDisconnectedEvent()
+		{
+			PeerDisconnectedEvent = null;
+		}
+
+		public void ClearNetworkErrorEvent()
+		{
+			NetworkErrorEvent = null;
+		}
+
+		public void ClearNetworkReceiveEvent()
+		{
+			NetworkReceiveEvent = null;
+		}
+
+		public void ClearNetworkReceiveUnconnectedEvent()
+		{
+			NetworkReceiveUnconnectedEvent = null;
+		}
+
+		public void ClearNetworkLatencyUpdateEvent()
+		{
+			NetworkLatencyUpdateEvent = null;
+		}
+
+		public void ClearConnectionRequestEvent()
+		{
+			ConnectionRequestEvent = null;
+		}
+
+		public void ClearDeliveryEvent()
+		{
+			DeliveryEvent = null;
+		}
+
+		public void ClearNtpResponseEvent()
+		{
+			NtpResponseEvent = null;
+		}
 
 		void INetEventListener.OnPeerConnected(NetPeer peer)
 		{
@@ -104,7 +206,7 @@ namespace FlyingWormConsole3.LiteNetLib
 			}
 		}
 
-		void INetEventListener.OnNetworkError(NetEndPoint endPoint, int socketErrorCode)
+		void INetEventListener.OnNetworkError(IPEndPoint endPoint, SocketError socketErrorCode)
 		{
 			if (NetworkErrorEvent != null)
 			{
@@ -112,15 +214,15 @@ namespace FlyingWormConsole3.LiteNetLib
 			}
 		}
 
-		void INetEventListener.OnNetworkReceive(NetPeer peer, NetDataReader reader)
+		void INetEventListener.OnNetworkReceive(NetPeer peer, NetPacketReader reader, DeliveryMethod deliveryMethod)
 		{
 			if (NetworkReceiveEvent != null)
 			{
-				NetworkReceiveEvent(peer, reader);
+				NetworkReceiveEvent(peer, reader, deliveryMethod);
 			}
 		}
 
-		void INetEventListener.OnNetworkReceiveUnconnected(NetEndPoint remoteEndPoint, NetDataReader reader, UnconnectedMessageType messageType)
+		void INetEventListener.OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType)
 		{
 			if (NetworkReceiveUnconnectedEvent != null)
 			{
@@ -135,6 +237,29 @@ namespace FlyingWormConsole3.LiteNetLib
 				NetworkLatencyUpdateEvent(peer, latency);
 			}
 		}
+
+		void INetEventListener.OnConnectionRequest(ConnectionRequest request)
+		{
+			if (ConnectionRequestEvent != null)
+			{
+				ConnectionRequestEvent(request);
+			}
+		}
+
+		void IDeliveryEventListener.OnMessageDelivered(NetPeer peer, object userData)
+		{
+			if (DeliveryEvent != null)
+			{
+				DeliveryEvent(peer, userData);
+			}
+		}
+
+		void INtpEventListener.OnNtpResponse(NtpPacket packet)
+		{
+			if (NtpResponseEvent != null)
+			{
+				NtpResponseEvent(packet);
+			}
+		}
 	}
 }
-#endif

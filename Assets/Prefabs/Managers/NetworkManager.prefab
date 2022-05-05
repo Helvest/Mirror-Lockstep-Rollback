@@ -31,6 +31,7 @@ Transform:
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
@@ -47,8 +48,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0afa689c8ee3b3e4a9360f97add5be60, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  dontDestroyOnLoad: 1
-  PersistNetworkManagerToOfflineScene: 1
+  dontDestroyOnLoad: 0
   runInBackground: 1
   autoStartServerBuild: 1
   serverTickRate: 30
@@ -57,8 +57,6 @@ MonoBehaviour:
   transport: {fileID: 5902396272763538541}
   networkAddress: localhost
   maxConnections: 10
-  disconnectInactiveConnections: 0
-  disconnectInactiveTimeout: 100
   authenticator: {fileID: 0}
   playerPrefab: {fileID: 544975416279015771, guid: 5390e984b00dac64c95085729e3767b8, type: 3}
   autoCreatePlayer: 1
@@ -66,9 +64,9 @@ MonoBehaviour:
   spawnPrefabs:
   - {fileID: 8115066778614826000, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
   - {fileID: 830971732508115933, guid: 6ee84ddd87c604644bdfd5194b7989b6, type: 3}
-  _sendTime: 0
-  _autoStartRollback: 1
-  _rollbackMode: 1
+  _autoStartRollback: 0
+  _rollbackMode: 0
+  <TM>k__BackingField: {fileID: 0}
 --- !u!114 &2394090620823507203
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -98,7 +96,7 @@ MonoBehaviour:
   serverBroadcastListenPort: 47777
   enableActiveDiscovery: 1
   ActiveDiscoveryInterval: 3
-  transport: {fileID: 0}
+  transport: {fileID: 5902396272763538541}
   OnServerFound:
     m_PersistentCalls:
       m_Calls:
@@ -145,9 +143,9 @@ MonoBehaviour:
   ReceiveTimeout: 30000
   serverMaxMessageSize: 16384
   serverMaxReceivesPerTick: 10000
-  serverSendQueueLimitPerConnection: 10000
-  serverReceiveQueueLimitPerConnection: 10000
+  serverSendQueueLimitPerConnection: 1000
+  serverReceiveQueueLimitPerConnection: 1000
   clientMaxMessageSize: 16384
-  clientMaxReceivesPerTick: 1000
-  clientSendQueueLimit: 10000
-  clientReceiveQueueLimit: 10000
+  clientMaxReceivesPerTick: 100
+  clientSendQueueLimit: 1000
+  clientReceiveQueueLimit: 1000

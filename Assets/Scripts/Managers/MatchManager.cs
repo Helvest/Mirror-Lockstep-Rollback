@@ -1,12 +1,13 @@
-using UnityEngine;
 using Mirror;
+using TickPhysics;
+using UnityEngine;
 
 public class MatchManager : NetworkBehaviour
 {
 
-	#region Variables
+	#region Fields
 
-	private NetTickManager3D _tickManager;
+	protected ITickSystem tickSystem = default;
 
 	[SerializeField]
 	private GameObject[] _pawnableArray;
@@ -20,23 +21,11 @@ public class MatchManager : NetworkBehaviour
 
 	private void OnEnable()
 	{
-		SL.AddOrDestroy(this);
-	}
-
-	private void Start()
-	{
-		SL.TryGet(out _tickManager);
-	}
-
-	private void OnDisable()
-	{
-		SL.Remove(this);
+		SL.TryGetIfNull(ref tickSystem);
 	}
 
 	public override void OnStartServer()
 	{
-		Debug.LogWarning("MatchManager - OnStartServer");
-
 		CreateMatchScene();
 	}
 
@@ -73,8 +62,7 @@ public class MatchManager : NetworkBehaviour
 			//appliquer les inputs pour la frame
 			if (Input.GetKeyDown(KeyCode.A))
 			{
-				_tickManager.IsPhysicUpdated = !_tickManager.IsPhysicUpdated;
-				
+				tickSystem.IsPhysicUpdated = !tickSystem.IsPhysicUpdated;
 			}
 
 			if (Input.GetKeyDown(KeyCode.M))

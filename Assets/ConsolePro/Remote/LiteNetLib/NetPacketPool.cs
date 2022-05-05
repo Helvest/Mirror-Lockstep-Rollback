@@ -1,101 +1,84 @@
-#if DEBUG && !UNITY_WP_8_1 && !UNITY_WSA
-using System;
-using System.Collections.Generic;
-using FlyingWormConsole3.LiteNetLib.Utils;
+﻿using System;
+using System.Threading;
 
 namespace FlyingWormConsole3.LiteNetLib
 {
-	internal class NetPacketPool
+	internal sealed class NetPacketPool
 	{
-		private readonly Stack<NetPacket> _pool;
-
-		public NetPacketPool()
-		{
-			_pool = new Stack<NetPacket>();
-		}
-
-		public NetPacket GetWithData(PacketProperty property, NetDataWriter writer)
-		{
-			var packet = Get(property, writer.Length);
-			Buffer.BlockCopy(writer.Data, 0, packet.RawData, NetPacket.GetHeaderSize(property), writer.Length);
-			return packet;
-		}
+		private NetPacket _head;
+		private int _count;
+		private readonly object _lock = new object();
 
 		public NetPacket GetWithData(PacketProperty property, byte[] data, int start, int length)
 		{
-			var packet = Get(property, length);
-			Buffer.BlockCopy(data, start, packet.RawData, NetPacket.GetHeaderSize(property), length);
-			return packet;
-		}
-
-		//Get packet just for read
-		public NetPacket GetAndRead(byte[] data, int start, int count)
-		{
-			NetPacket packet = null;
-			lock (_pool)
-			{
-				if (_pool.Count > 0)
-				{
-					packet = _pool.Pop();
-				}
-			}
-			if (packet == null)
-			{
-				//allocate new packet of max size or bigger
-				packet = new NetPacket(NetConstants.MaxPacketSize);
-			}
-			if (!packet.FromBytes(data, start, count))
-			{
-				Recycle(packet);
-				return null;
-			}
+			int headerSize = NetPacket.GetHeaderSize(property);
+			var packet = GetPacket(length + headerSize);
+			packet.Property = property;
+			Buffer.BlockCopy(data, start, packet.RawData, headerSize, length);
 			return packet;
 		}
 
 		//Get packet with size
-		public NetPacket Get(PacketProperty property, int size)
+		public NetPacket GetWithProperty(PacketProperty property, int size)
 		{
-			NetPacket packet = null;
-			size += NetPacket.GetHeaderSize(property);
-			if (size <= NetConstants.MaxPacketSize)
-			{
-				lock (_pool)
-				{
-					if (_pool.Count > 0)
-					{
-						packet = _pool.Pop();
-					}
-				}
-			}
-			if (packet == null)
-			{
-				//allocate new packet of max size or bigger
-				packet = new NetPacket(size > NetConstants.MaxPacketSize ? size : NetConstants.MaxPacketSize);
-			}
-			else
-			{
-				Array.Clear(packet.RawData, 0, size);
-			}
+			var packet = GetPacket(size + NetPacket.GetHeaderSize(property));
 			packet.Property = property;
+			return packet;
+		}
+
+		public NetPacket GetWithProperty(PacketProperty property)
+		{
+			var packet = GetPacket(NetPacket.GetHeaderSize(property));
+			packet.Property = property;
+			return packet;
+		}
+
+		public NetPacket GetPacket(int size)
+		{
+			if (size > NetConstants.MaxPacketSize)
+			{
+				return new NetPacket(size);
+			}
+
+			NetPacket packet;
+			lock (_lock)
+			{
+				packet = _head;
+				if (packet == null)
+				{
+					return new NetPacket(size);
+				}
+
+				_head = _head.Next;
+			}
+
+			Interlocked.Decrement(ref _count);
 			packet.Size = size;
+			if (packet.RawData.Length < size)
+			{
+				packet.RawData = new byte[size];
+			}
+
 			return packet;
 		}
 
 		public void Recycle(NetPacket packet)
 		{
-			if (packet.Size > NetConstants.MaxPacketSize)
+			if (packet.RawData.Length > NetConstants.MaxPacketSize || _count >= NetConstants.PacketPoolSize)
 			{
-				//Dont pool big packets. Save memory
+				//Don't pool big packets. Save memory
 				return;
 			}
 
+			Interlocked.Increment(ref _count);
+
 			//Clean fragmented flag
-			packet.IsFragmented = false;
-			lock (_pool)
+			packet.RawData[0] = 0;
+			lock (_lock)
 			{
-				_pool.Push(packet);
+				packet.Next = _head;
+				_head = packet;
 			}
 		}
 	}
 }
-#endif

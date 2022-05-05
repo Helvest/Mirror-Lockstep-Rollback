@@ -1,11 +1,28 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 
 namespace Mirror
 {
 	public class RollbackNetworkManager : NetworkManager
 	{
 
-		#region Variables
+		#region Fields
+
+		private static RollbackNetworkManager _singleton;
+		public static new RollbackNetworkManager singleton
+		{
+			get
+			{
+				if (_singleton == null)
+				{
+					_singleton = (RollbackNetworkManager)NetworkManager.singleton;
+				}
+
+				return _singleton;
+			}
+		}
+
+		protected INetTickSystem netTickSystem = default;
 
 		public bool IsServer { get; private set; } = false;
 
@@ -13,16 +30,7 @@ namespace Mirror
 
 		public bool RollbackSystemIsReady { get; private set; } = false;
 
-		private NetTickManager3D _tickManager;
-
 		[Header("Rollback")]
-		[SerializeField]
-		[Range(0f, 2f)]
-		private float _sendTime = 0.1f;
-
-		private float _sendCounter = 0;
-
-		private uint _lastFrameSend = 0;
 
 		[SerializeField]
 		private bool _autoStartRollback = false;
@@ -32,21 +40,22 @@ namespace Mirror
 
 		#endregion
 
-		#region Start
+		#region Init
 
-		public override void Start()
+		private void OnEnable()
 		{
-			SL.TryGet(out _tickManager);
-			base.Start();
+			SL.TryGetIfNull(ref netTickSystem);
 		}
+
+		#endregion
+
+		#region OnStart
 
 		public override void OnStartServer()
 		{
 			IsServer = true;
 
-			base.OnStartServer();
-
-			if (_autoStartRollback)
+			if (_autoStartRollback && mode == NetworkManagerMode.ServerOnly)
 			{
 				StartRollbackSystem();
 			}
@@ -56,12 +65,22 @@ namespace Mirror
 		{
 			IsClient = true;
 
-			if (mode != NetworkManagerMode.Host)
+			if (mode == NetworkManagerMode.Host)
+			{
+				NetworkClient.RegisterHandler<Rollback.ConfigLockstepMessage>(_ => { });
+				NetworkClient.RegisterHandler<Rollback.DeltaLockstepMessage>(_ => { });
+				NetworkClient.RegisterHandler<Rollback.FullLockstepMessage>(_ => { });
+				NetworkClient.RegisterHandler<Rollback.EndLockstepMessage>(_ => { });
+			}
+			else
 			{
 				NetworkClient.RegisterHandler<Rollback.ConfigLockstepMessage>(Rollback.OnReceiveConfigLockstep);
 				NetworkClient.RegisterHandler<Rollback.DeltaLockstepMessage>(Rollback.OnReceiveDeltaLockstep);
 				NetworkClient.RegisterHandler<Rollback.FullLockstepMessage>(Rollback.OnReceiveFullLockstep);
 				NetworkClient.RegisterHandler<Rollback.EndLockstepMessage>(Rollback.OnReceiveEndLockstepMessage);
+
+				NetworkClient.ReplaceHandler<SpawnMessage>(Rollback.OnSpawn);
+				NetworkClient.ReplaceHandler<EntityStateMessage>(Rollback.OnEntityStateMessage);
 			}
 
 			if (_autoStartRollback)
@@ -72,25 +91,23 @@ namespace Mirror
 
 		#endregion
 
-		#region Stop
+		#region OnStop
 
 		public override void OnStopClient()
 		{
 			IsClient = false;
 			StopRollbackSystem();
-			base.OnStopClient();
 		}
 
 		public override void OnStopServer()
 		{
 			IsServer = false;
 			StopRollbackSystem();
-			base.OnStopServer();
 		}
 
 		#endregion
 
-		#region Rollback System
+		#region Set Rollback System
 
 		private void StartRollbackSystem()
 		{
@@ -99,16 +116,9 @@ namespace Mirror
 				return;
 			}
 
-			_tickManager.Clear();
+			netTickSystem.Clear();
 
 			Rollback.rollbackMode = _rollbackMode;
-
-			if (_sendTime < Time.fixedDeltaTime)
-			{
-				_sendTime = Time.fixedDeltaTime;
-			}
-
-			_sendCounter = _sendTime;
 
 			RollbackSystemIsReady = true;
 		}
@@ -118,75 +128,120 @@ namespace Mirror
 			RollbackSystemIsReady = false;
 		}
 
+		#endregion
+
+		#region Update Rollback System
+
 		public virtual void Update()
 		{
-			if (RollbackSystemIsReady && (IsServer || IsClient))
+			if (RollbackSystemIsReady)// && (IsServer || IsClient))
 			{
 				UpdateRollback();
 			}
 		}
 
-		public void UpdateRollback()
+		protected void UpdateRollback()
 		{
 			//auto: reception des messages
 
-			//avancer la simulation jusqu'au present
-			_tickManager.Tick(NetworkTime.time, Time.deltaTime, Time.fixedDeltaTime);
+			//advance the simulation to the present
+			netTickSystem.Tick(NetworkTime.time, Time.deltaTime, Time.fixedDeltaTime);
 
-			if (IsServer)
+			if (!IsServer)
 			{
-				if (Rollback.sendConfigMessage)
-				{
-					Rollback.sendConfigMessage = false;
-
-					_tickManager.SendConfigLockstepMessage(NetworkServer.connections.Values, false);
-
-					_sendCounter = (float)_tickManager.FixedTime + _sendTime;
-
-					_lastFrameSend = _tickManager.FixedFrameCount;
-
-					_tickManager.OnFinishSendLockstepMessage();
-				}
-
-				//Check si assez de temps est passer pour un lockstep
-				else if (_tickManager.FixedTime > _sendCounter)
-				{
-					if (_lastFrameSend != _tickManager.FixedFrameCount)
-					{
-						//Send lockstep to clients
-						switch (Rollback.rollbackMode)
-						{
-							case RollbackMode.SendFullData:
-								_tickManager.SendFullLockstepMessage(NetworkServer.connections.Values);
-								break;
-							case RollbackMode.SendDeltaData:
-								_tickManager.SendDeltaLockstepMessage(NetworkServer.connections.Values);
-								break;
-						}
-
-						_sendCounter = (float)_tickManager.FixedTime + _sendTime;
-
-						_lastFrameSend = _tickManager.FixedFrameCount;
-
-						_tickManager.OnFinishSendLockstepMessage();
-					}
-				}
-
-				//Send First Lockstep Message
-				if (Rollback.newPlayerReadyForRollback.Count > 0)
-				{
-					foreach (var conn in Rollback.newPlayerReadyForRollback)
-					{
-						NetworkServer.SetClientReady(conn);
-					}
-
-					_tickManager.SendConfigLockstepMessage(Rollback.newPlayerReadyForRollback, true);
-
-					Rollback.newPlayerReadyForRollback.Clear();
-				}
-
-				//auto: Server send spawn and delta lockstep to all connections
+				return;
 			}
+
+			//Remove conn
+			RemoveConnNoMoreReadyForRollback();
+
+			netTickSystem.ServerUpdate();
+
+			//Send First Lockstep Message
+			AddConnReadyForRollback();
+		}
+
+		#endregion
+
+		#region ChangeRollbackState
+
+		private readonly List<NetworkConnectionToClient> _newConnReadyForRollback = new();
+		private readonly List<NetworkConnectionToClient> _connNoMoreReadyForRollback = new();
+
+		public void ChangeRollbackState(NetworkConnectionToClient conn, bool useRollback)
+		{
+			if (useRollback)
+			{
+				if (conn.rollbackState != RollbackState.NotObserving)
+				{
+					return;
+				}
+
+				conn.rollbackState = RollbackState.ReadyToObserve;
+
+				if (!_newConnReadyForRollback.Contains(conn))
+				{
+					_newConnReadyForRollback.Add(conn);
+				}
+			}
+			else
+			{
+				if (conn.rollbackState == RollbackState.NotObserving)
+				{
+					return;
+				}
+
+				conn.rollbackState = RollbackState.NotObserving;
+
+				if (!_connNoMoreReadyForRollback.Contains(conn))
+				{
+					_connNoMoreReadyForRollback.Add(conn);
+				}
+			}
+		}
+
+		private void AddConnReadyForRollback()
+		{
+			if (_newConnReadyForRollback.Count == 0)
+			{
+				return;
+			}
+
+			foreach (var conn in _newConnReadyForRollback)
+			{
+				NetworkServer.SetClientReady(conn);
+			}
+
+			netTickSystem.SendConfigLockstepMessage(_newConnReadyForRollback, true);
+
+			_newConnReadyForRollback.Clear();
+		}
+
+		private void RemoveConnNoMoreReadyForRollback()
+		{
+			if (_connNoMoreReadyForRollback.Count == 0)
+			{
+				return;
+			}
+
+			foreach (var conn in _connNoMoreReadyForRollback)
+			{
+				if (conn.rollbackState != RollbackState.NotObserving)
+				{
+					continue;
+				}
+
+				foreach (var identity in NetworkServer.spawned.Values)
+				{
+					if (identity.useRollback)
+					{
+						conn.RemoveFromObserving(identity, false);
+						identity.RemoveObserver(conn);
+					}
+				}
+			}
+
+			_connNoMoreReadyForRollback.Clear();
 		}
 
 		#endregion

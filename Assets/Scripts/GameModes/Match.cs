@@ -1,50 +1,47 @@
 ﻿using Mirror;
 using UnityEngine;
-using Helvest.Framework;
 
-namespace GameMode
+public class Match : MonoBehaviour
 {
-	public class Match : GameModeBase
+	protected NetworkManager networkManager = default;
+	protected MatchManager matchManager = default;
+
+	[SerializeField]
+	private MonoServiceLocator _serverService = default;
+	[SerializeField]
+	private MonoServiceLocator _clientService = default;
+
+	private bool _isServer = false;
+
+	private bool _isClient = false;
+
+	private void OnEnable()
 	{
-		[SerializeField]
-		private MatchManager _matchManagerPrefab;
+		SL.TryGetIfNull(ref networkManager);
 
-		private MatchManager _matchManager;
+		_isServer = networkManager.mode == NetworkManagerMode.Host || networkManager.mode == NetworkManagerMode.ServerOnly;
+		_isClient = networkManager.mode == NetworkManagerMode.Host || networkManager.mode == NetworkManagerMode.ClientOnly;
 
-		private bool IsServer = false;
-
-		//private bool IsClient = false;
-
-		public override void EnterState()
+		if (_isServer)
 		{
-			base.EnterState();
+			_serverService.gameObject.SetActive(true);
 
-			SL.TryGet<NetworkManager>(out var networkManager);
-
-			IsServer = networkManager.mode == NetworkManagerMode.Host || networkManager.mode == NetworkManagerMode.ServerOnly;
-			//IsClient = networkManager.mode == NetworkManagerMode.Host || networkManager.mode == NetworkManagerMode.ClientOnly;
-
-			Debug.Log("networkManager.mode: " + networkManager.mode);
-
-			if (IsServer)
+			if (_serverService.TryGet(out matchManager))
 			{
-				_matchManager = Instantiate(_matchManagerPrefab);
-				NetworkServer.Spawn(_matchManager.gameObject);
-
-				//SL.TryGet(out NetworkManager networkManager);
-				//networkManager.StartHost();
+				NetworkServer.Spawn(matchManager.gameObject);
 			}
 		}
 
-		public override void ExitState()
+		if (_isClient)
 		{
-			base.ExitState();
+			_clientService.gameObject.SetActive(true);
+		}
+	}
 
-			if (IsServer && _matchManager != null)
-			{
-				NetworkServer.Destroy(_matchManager.gameObject);			
-			}
-		}	
+	private void OnDisable()
+	{
+		_clientService.gameObject.SetActive(false);
+		_serverService.gameObject.SetActive(false);
 	}
 
 }

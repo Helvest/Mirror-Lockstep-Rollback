@@ -1,0 +1,67 @@
+using UnityEngine;
+using TickPhysics;
+
+public class TickSystem3D : TickSystem
+{
+
+	#region AutoSimulation
+
+	public virtual bool AutoSimulation
+	{
+		get => Physics.autoSimulation;
+
+		set => Physics.autoSimulation = value;
+	}
+
+	#endregion
+
+	#region SimulatePhysic
+
+	protected override void SimulatePhysic(double fixedDeltaTime)
+	{
+		if (!AutoSimulation)
+		{
+			Physics.Simulate((float)fixedDeltaTime);
+		}
+	}
+
+	#endregion
+
+}
+
+public class MonoTickSystem3D : MonoTickSystem
+{
+
+	#region Fields
+
+	protected override ITickSystem TickSystem => TickSystem3D;
+
+	protected TickSystem3D TickSystem3D { get; } = new TickSystem3D();
+
+	#endregion
+
+	#region AutoSimulation
+
+	[SerializeField]
+	protected bool autoSimulation = false;
+
+	public virtual bool AutoSimulation
+	{
+		get => TickSystem3D.AutoSimulation;
+
+		set => TickSystem3D.AutoSimulation = autoSimulation = value;
+	}
+
+	#endregion
+
+	#region OnEnable
+
+	protected override void OnEnable()
+	{
+		base.OnEnable();
+		AutoSimulation = autoSimulation;
+	}
+
+	#endregion
+
+}

@@ -4,18 +4,25 @@ using UnityEngine;
 
 public class PlayerBall : NetworkBehaviour, IPhysicsObject
 {
-	private Rigidbody _rigidbody;
+
+	#region Fields
+
+	protected ITickSystem tickSystem = default;
+
+	private Transform _cachedTransform = default;
+	private Rigidbody _rigidbody = default;
 
 	[SerializeField]
-	private Transform _visual;
+	private Transform _visual = default;
 
-	private TickManager3D _tickManager;
 
 	/// <summary>
 	/// Ignore value if is host or client with Authority
 	/// </summary>
 	/// <returns></returns>
 	private bool IgnoreSync => isServer || hasAuthority;
+
+	#endregion
 
 	#region Sync vars
 
@@ -66,7 +73,7 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 	[SyncVar(hook = nameof(OnRotationChanged))]
 	private Quaternion _rotation;
 
-	private void OnRotationChanged(Quaternion oldValue, Quaternion newValue)
+	private void OnRotationChanged(Quaternion _, Quaternion newValue)
 	{
 		if (IgnoreSync)
 		{
@@ -79,11 +86,22 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 
 	#endregion
 
+	#region Init
+
 	private void Awake()
 	{
-		SL.TryGet(out _tickManager);
 		TryGetComponent(out _rigidbody);
+		TryGetComponent(out _cachedTransform);
 	}
+
+	private void OnEnable()
+	{
+		SL.TryGetIfNull(ref tickSystem);
+	}
+
+	#endregion
+
+	#region OnStartServer
 
 	public override void OnStartServer()
 	{
@@ -92,6 +110,10 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 		_angularVelocity = _rigidbody.angularVelocity;
 		_rotation = _rigidbody.rotation;
 	}
+
+	#endregion
+
+	#region UpdatePhysics
 
 	public void UpdatePhysics()
 	{
@@ -102,6 +124,10 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 			_rigidbody.angularVelocity = Random.onUnitSphere * 50f;
 		}
 	}
+
+	#endregion
+
+	#region UpdateGraphics
 
 	private bool _inputSpaceWasPress = false;
 
@@ -151,15 +177,17 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 
 		if (extrapolPosition)
 		{
-			var extraPosition = _rigidbody.velocity * _tickManager.ExtraDeltaTime;
+			var extraPosition = _rigidbody.velocity * tickSystem.ExtraDeltaTime;
 			_visual.position = _rigidbody.position + extraPosition;
 		}
 
 		if (extrapolRotation)
 		{
-			var extraRotation = Quaternion.Euler(transform.InverseTransformVector(_angularVelocity) * Mathf.Rad2Deg * _tickManager.ExtraDeltaTime);
+			var extraRotation = Quaternion.Euler(Mathf.Rad2Deg * tickSystem.ExtraDeltaTime * transform.InverseTransformVector(_angularVelocity));
 			_visual.rotation = _rigidbody.rotation * extraRotation;
 		}
 	}
+
+	#endregion
 
 }

@@ -1,0 +1,67 @@
+using UnityEngine;
+using TickPhysics;
+
+public class TickSystem2D : TickSystem
+{
+
+	#region SimulationMode
+
+	public virtual SimulationMode2D SimulationMode
+	{
+		get => Physics2D.simulationMode;
+
+		set => Physics2D.simulationMode = value;
+	}
+
+	#endregion
+
+	#region SimulatePhysic
+
+	protected override void SimulatePhysic(double fixedDeltaTime)
+	{
+		if (SimulationMode == SimulationMode2D.Script)
+		{
+			Physics2D.Simulate((float)fixedDeltaTime);
+		}
+	}
+
+	#endregion
+
+}
+
+public class MonoTickSystem2D : MonoTickSystem
+{
+
+	#region Fields
+
+	protected override ITickSystem TickSystem => TickSystem2D;
+
+	protected TickSystem2D TickSystem2D { get; } = new TickSystem2D();
+
+	#endregion
+
+	#region SimulationMode
+
+	[SerializeField]
+	protected SimulationMode2D simulationMode = SimulationMode2D.Script;
+
+	public virtual SimulationMode2D SimulationMode
+	{
+		get => TickSystem2D.SimulationMode;
+
+		set => TickSystem2D.SimulationMode = simulationMode = value;
+	}
+
+	#endregion
+
+	#region OnEnable
+
+	protected override void OnEnable()
+	{
+		base.OnEnable();
+		SimulationMode = simulationMode;
+	}
+
+	#endregion
+
+}

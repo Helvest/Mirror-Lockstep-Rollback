@@ -1,35 +1,23 @@
-using UnityEngine;
 using Mirror;
+using UnityEngine;
 
 public class NetworkPlayer : NetworkBehaviour
 {
-	public override void OnStartClient()
+	public override void OnStartServer()
 	{
-		RollbackIsReady = true;
+		if (rollbackIsReady)
+		{
+			RollbackNetworkManager.singleton.ChangeRollbackState(connectionToClient, rollbackIsReady);
+		}
 	}
 
-	[SyncVar(hook = nameof(SetRollbackState))]
-	public bool RollbackIsReady = false;
+	public bool rollbackIsReady = true;
 
-    public void SetRollbackState(bool _, bool newValue)
+	[Command]
+	private void SwitchClientRollbackState()
 	{
-		if (isServer)
-		{
-			if (newValue)
-			{
-				if(connectionToClient.rollbackState == RollbackState.NotObserving)
-				{				
-					connectionToClient.rollbackState = RollbackState.ReadyToObserve;
-
-					Rollback.AddPlayerReadyForRollback(connectionToClient);
-				}
-			}
-			else
-			{
-				connectionToClient.rollbackState = RollbackState.NotObserving;
-			}
-
-		}
+		rollbackIsReady = !rollbackIsReady;
+		RollbackNetworkManager.singleton.ChangeRollbackState(connectionToClient, rollbackIsReady);
 	}
 
 	private void Update()
@@ -38,7 +26,7 @@ public class NetworkPlayer : NetworkBehaviour
 		{
 			if (Input.GetKeyDown(KeyCode.R))
 			{
-				RollbackIsReady = !RollbackIsReady;
+				SwitchClientRollbackState();
 			}
 		}
 	}
