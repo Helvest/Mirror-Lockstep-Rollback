@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 2394090620823507203}
   - component: {fileID: 8202861939736633570}
   - component: {fileID: 3427972049711994466}
-  - component: {fileID: 5902396272763538541}
+  - component: {fileID: 7754031961975369238}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
@@ -54,7 +54,7 @@ MonoBehaviour:
   serverTickRate: 30
   offlineScene: 
   onlineScene: 
-  transport: {fileID: 5902396272763538541}
+  transport: {fileID: 7754031961975369238}
   networkAddress: localhost
   maxConnections: 10
   authenticator: {fileID: 0}
@@ -96,7 +96,7 @@ MonoBehaviour:
   serverBroadcastListenPort: 47777
   enableActiveDiscovery: 1
   ActiveDiscoveryInterval: 3
-  transport: {fileID: 5902396272763538541}
+  transport: {fileID: 7754031961975369238}
   OnServerFound:
     m_PersistentCalls:
       m_Calls:
@@ -125,7 +125,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   networkDiscovery: {fileID: 8202861939736633570}
---- !u!114 &5902396272763538541
+--- !u!114 &7754031961975369238
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -134,18 +134,23 @@ MonoBehaviour:
   m_GameObject: {fileID: 7189623261859052184}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c7424c1070fad4ba2a7a96b02fbeb4bb, type: 3}
+  m_Script: {fileID: 11500000, guid: 6b0fecffa3f624585964b0d0eb21b18e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  port: 7777
+  Port: 7777
+  DualMode: 1
   NoDelay: 1
-  SendTimeout: 5000
-  ReceiveTimeout: 30000
-  serverMaxMessageSize: 16384
-  serverMaxReceivesPerTick: 10000
-  serverSendQueueLimitPerConnection: 1000
-  serverReceiveQueueLimitPerConnection: 1000
-  clientMaxMessageSize: 16384
-  clientMaxReceivesPerTick: 100
-  clientSendQueueLimit: 1000
-  clientReceiveQueueLimit: 1000
+  Interval: 10
+  Timeout: 10000
+  FastResend: 2
+  CongestionWindow: 0
+  SendWindowSize: 4096
+  ReceiveWindowSize: 4096
+  MaxRetransmit: 40
+  NonAlloc: 1
+  MaximizeSendReceiveBuffersToOSLimit: 1
+  ReliableMaxMessageSize: 298449
+  UnreliableMaxMessageSize: 1199
+  debugLog: 0
+  statisticsGUI: 0
+  statisticsLog: 0
