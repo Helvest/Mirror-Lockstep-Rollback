@@ -44,7 +44,7 @@ namespace Mirror
 
 		private void OnEnable()
 		{
-			SL.TryGetIfNull(ref netTickSystem);
+			SL.TryGet(out netTickSystem);
 		}
 
 		#endregion
