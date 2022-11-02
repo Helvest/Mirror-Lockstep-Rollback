@@ -11,8 +11,10 @@ namespace Mirror
 		// loading multiples of a subscene the name won't be unique
 		private readonly Dictionary<Scene, HashSet<NetworkIdentity>> sceneObjects =
 			new Dictionary<Scene, HashSet<NetworkIdentity>>();
+
 		private readonly Dictionary<NetworkIdentity, Scene> lastObjectScene =
 			new Dictionary<NetworkIdentity, Scene>();
+
 		private HashSet<Scene> dirtyScenes = new HashSet<Scene>();
 
 		public override void OnSpawned(NetworkIdentity identity)

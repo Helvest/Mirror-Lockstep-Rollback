@@ -105,6 +105,11 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 
 	public override void OnStartServer()
 	{
+		ServerSync();
+	}
+
+	private void ServerSync()
+	{
 		_position = _rigidbody.position;
 		_velocity = _rigidbody.velocity;
 		_angularVelocity = _rigidbody.angularVelocity;
@@ -141,10 +146,7 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 	{
 		if (isServer)
 		{
-			_position = _rigidbody.position;
-			_velocity = _rigidbody.velocity;
-			_angularVelocity = _rigidbody.angularVelocity;
-			_rotation = _rigidbody.rotation;
+			ServerSync();
 		}
 
 		if (Input.GetKeyDown(KeyCode.Space))
