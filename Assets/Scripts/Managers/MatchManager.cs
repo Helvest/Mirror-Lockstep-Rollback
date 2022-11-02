@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Mirror;
 using TickPhysics;
 using UnityEngine;
@@ -10,10 +11,10 @@ public class MatchManager : NetworkBehaviour
 	protected ITickSystem tickSystem = default;
 
 	[SerializeField]
-	private GameObject[] _pawnableArray;
+	private List<GameObject> _pawnableArray = default;
 
 	[SerializeField]
-	private GameObject _ballPrefab;
+	private GameObject _prefab = default;
 
 	#endregion
 
@@ -39,6 +40,8 @@ public class MatchManager : NetworkBehaviour
 		{
 			var instance = Instantiate(item);
 			NetworkServer.Spawn(instance);
+
+			goList.Add(instance);
 		}
 	}
 
@@ -67,11 +70,25 @@ public class MatchManager : NetworkBehaviour
 
 			if (Input.GetKeyDown(KeyCode.M))
 			{
-				var newBall = Instantiate(_ballPrefab);
+				var newBall = Instantiate(_prefab);
 				NetworkServer.Spawn(newBall);
+
+				goList.Add(newBall);
+			}
+
+			if (Input.GetKeyDown(KeyCode.L))
+			{
+				if (goList.Count > 0)
+				{
+					var ball = goList[0];
+					goList.RemoveAt(0);
+					NetworkServer.Destroy(ball);
+				}
 			}
 		}
 	}
+
+	public readonly SyncList<GameObject> goList = new();
 
 	#endregion
 

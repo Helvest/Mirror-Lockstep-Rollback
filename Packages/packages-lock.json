@@ -1,18 +1,25 @@
 {
   "dependencies": {
-    "com.helvest.backbone": {
-      "version": "https://github.com/Helvest/Unity-Package-Backbone-Framework.git",
+    "com.helvest.servicelocator": {
+      "version": "https://github.com/Helvest/Unity-Package-Service-Locator.git",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "15d41428d827781e48bbe32d38e324457ecf7416"
+      "hash": "478f1373584ad89e7a6a727420320a92f3a69d42"
+    },
+    "com.helvest.stypemachine": {
+      "version": "https://github.com/Helvest/Unity-Package-Stype-Machine.git",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "8c1ecc6c90dc337e431c6a2e3d0a9a00355084ef"
     },
     "com.helvest.tickphysic": {
       "version": "https://github.com/Helvest/Unity-Package-Tick-Physic.git",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "eb5e9f7d19787078961a3bbc299d705da75de017"
+      "hash": "a0b58623cea6c56e5cf16914b04e3aa2dae3aa68"
     },
     "com.unity.ext.nunit": {
       "version": "1.0.6",
@@ -22,7 +29,7 @@
       "url": "https://packages.unity.com"
     },
     "com.unity.ide.visualstudio": {
-      "version": "2.0.15",
+      "version": "2.0.16",
       "depth": 0,
       "source": "registry",
       "dependencies": {

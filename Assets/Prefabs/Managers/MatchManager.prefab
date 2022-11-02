@@ -26,8 +26,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 830971732508115933}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.7092037, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
@@ -48,9 +49,7 @@ MonoBehaviour:
   syncInterval: 0.1
   _pawnableArray:
   - {fileID: 8115066778614826000, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
-  _ballPrefab: {fileID: 8115066778614826000, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
-  _tickManagerPrefab: {fileID: 2158316069053250106, guid: 75bc851eb67e29d4f94e500c69580794, type: 3}
-  _sendTime: 0
+  _prefab: {fileID: 8115066778614826000, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
 --- !u!114 &626255565821296911
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -63,9 +62,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b91ecbcc199f4492b9a91e820070131, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  useRollback: 0
   sceneId: 0
   serverOnly: 0
   visible: 0
   m_AssetId: 6ee84ddd87c604644bdfd5194b7989b6
   hasSpawned: 0
-  useRollback: 0
