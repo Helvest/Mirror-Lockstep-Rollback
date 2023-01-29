@@ -10,46 +10,44 @@ using Unity.CompilationPipeline.Common.ILPostProcessing;
 
 namespace Mirror.Weaver
 {
-	public static class ILPostProcessorFromFile
-	{
-		// read, weave, write file via ILPostProcessor
-		public static void ILPostProcessFile(string assemblyPath, string[] references, Action<string> OnWarning, Action<string> OnError)
-		{
-			// we COULD Weave() with a test logger manually.
-			// but for test result consistency on all platforms,
-			// let's invoke the ILPostProcessor here too.
-			var assembly = new CompiledAssemblyFromFile(assemblyPath)
-			{
-				References = references
-			};
+    public static class ILPostProcessorFromFile
+    {
+        // read, weave, write file via ILPostProcessor
+        public static void ILPostProcessFile(string assemblyPath, string[] references, Action<string> OnWarning, Action<string> OnError)
+        {
+            // we COULD Weave() with a test logger manually.
+            // but for test result consistency on all platforms,
+            // let's invoke the ILPostProcessor here too.
+            CompiledAssemblyFromFile assembly = new CompiledAssemblyFromFile(assemblyPath);
+            assembly.References = references;
 
-			// create ILPP and check WillProcess like Unity would.
-			var ilpp = new ILPostProcessorHook();
-			if (ilpp.WillProcess(assembly))
-			{
-				//Debug.Log($"Will Process: {assembly.Name}");
+            // create ILPP and check WillProcess like Unity would.
+            ILPostProcessorHook ilpp = new ILPostProcessorHook();
+            if (ilpp.WillProcess(assembly))
+            {
+                //Debug.Log($"Will Process: {assembly.Name}");
 
-				// process it like Unity would
-				var result = ilpp.Process(assembly);
+                // process it like Unity would
+                ILPostProcessResult result = ilpp.Process(assembly);
 
-				// handle the error messages like Unity would
-				foreach (var message in result.Diagnostics)
-				{
-					if (message.DiagnosticType == DiagnosticType.Warning)
-					{
-						OnWarning(message.MessageData);
-					}
-					else if (message.DiagnosticType == DiagnosticType.Error)
-					{
-						OnError(message.MessageData);
-					}
-				}
+                // handle the error messages like Unity would
+                foreach (DiagnosticMessage message in result.Diagnostics)
+                {
+                    if (message.DiagnosticType == DiagnosticType.Warning)
+                    {
+                        OnWarning(message.MessageData);
+                    }
+                    else if (message.DiagnosticType == DiagnosticType.Error)
+                    {
+                        OnError(message.MessageData);
+                    }
+                }
 
-				// save the weaved assembly to file.
-				// some tests open it and check for certain IL code.
-				File.WriteAllBytes(assemblyPath, result.InMemoryAssembly.PeData);
-			}
-		}
-	}
+                // save the weaved assembly to file.
+                // some tests open it and check for certain IL code.
+                File.WriteAllBytes(assemblyPath, result.InMemoryAssembly.PeData);
+            }
+        }
+    }
 }
 #endif

@@ -23,163 +23,145 @@ using Unity.CompilationPipeline.Common.ILPostProcessing;
 
 namespace Mirror.Weaver
 {
-	internal class ILPostProcessorAssemblyResolver : IAssemblyResolver
-	{
-		private readonly string[] assemblyReferences;
-		private readonly Dictionary<string, AssemblyDefinition> assemblyCache =
-			new Dictionary<string, AssemblyDefinition>();
-		private readonly ICompiledAssembly compiledAssembly;
-		private AssemblyDefinition selfAssembly;
-		private Logger Log;
+    class ILPostProcessorAssemblyResolver : IAssemblyResolver
+    {
+        readonly string[] assemblyReferences;
+        readonly Dictionary<string, AssemblyDefinition> assemblyCache =
+            new Dictionary<string, AssemblyDefinition>();
+        readonly ICompiledAssembly compiledAssembly;
+        AssemblyDefinition selfAssembly;
 
-		public ILPostProcessorAssemblyResolver(ICompiledAssembly compiledAssembly, Logger Log)
-		{
-			this.compiledAssembly = compiledAssembly;
-			assemblyReferences = compiledAssembly.References;
-			this.Log = Log;
-		}
+        Logger Log;
 
-		public void Dispose()
-		{
-			Dispose(true);
-			GC.SuppressFinalize(this);
-		}
+        public ILPostProcessorAssemblyResolver(ICompiledAssembly compiledAssembly, Logger Log)
+        {
+            this.compiledAssembly = compiledAssembly;
+            assemblyReferences = compiledAssembly.References;
+            this.Log = Log;
+        }
 
-		protected virtual void Dispose(bool disposing)
-		{
-			// Cleanup
-		}
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
 
-		public AssemblyDefinition Resolve(AssemblyNameReference name)
-		{
-			return Resolve(name, new ReaderParameters(ReadingMode.Deferred));
-		}
+        protected virtual void Dispose(bool disposing)
+        {
+            // Cleanup
+        }
 
-		public AssemblyDefinition Resolve(AssemblyNameReference name, ReaderParameters parameters)
-		{
-			lock (assemblyCache)
-			{
-				if (name.Name == compiledAssembly.Name)
-				{
-					return selfAssembly;
-				}
+        public AssemblyDefinition Resolve(AssemblyNameReference name) =>
+            Resolve(name, new ReaderParameters(ReadingMode.Deferred));
 
-				string fileName = FindFile(name);
-				if (fileName == null)
-				{
-					// returning null will throw exceptions in our weaver where.
-					// let's make it obvious why we returned null for easier debugging.
-					// NOTE: if this fails for "System.Private.CoreLib":
-					//       ILPostProcessorReflectionImporter fixes it!
-					Log.Warning($"ILPostProcessorAssemblyResolver.Resolve: Failed to find file for {name}");
-					return null;
-				}
+        public AssemblyDefinition Resolve(AssemblyNameReference name, ReaderParameters parameters)
+        {
+            lock (assemblyCache)
+            {
+                if (name.Name == compiledAssembly.Name)
+                    return selfAssembly;
 
-				var lastWriteTime = File.GetLastWriteTime(fileName);
+                string fileName = FindFile(name);
+                if (fileName == null)
+                {
+                    // returning null will throw exceptions in our weaver where.
+                    // let's make it obvious why we returned null for easier debugging.
+                    // NOTE: if this fails for "System.Private.CoreLib":
+                    //       ILPostProcessorReflectionImporter fixes it!
+                    Log.Warning($"ILPostProcessorAssemblyResolver.Resolve: Failed to find file for {name}");
+                    return null;
+                }
 
-				string cacheKey = fileName + lastWriteTime;
+                DateTime lastWriteTime = File.GetLastWriteTime(fileName);
 
-				if (assemblyCache.TryGetValue(cacheKey, out var result))
-				{
-					return result;
-				}
+                string cacheKey = fileName + lastWriteTime;
 
-				parameters.AssemblyResolver = this;
+                if (assemblyCache.TryGetValue(cacheKey, out AssemblyDefinition result))
+                    return result;
 
-				var ms = MemoryStreamFor(fileName);
+                parameters.AssemblyResolver = this;
 
-				string pdb = fileName + ".pdb";
-				if (File.Exists(pdb))
-				{
-					parameters.SymbolStream = MemoryStreamFor(pdb);
-				}
+                MemoryStream ms = MemoryStreamFor(fileName);
 
-				var assemblyDefinition = AssemblyDefinition.ReadAssembly(ms, parameters);
-				assemblyCache.Add(cacheKey, assemblyDefinition);
-				return assemblyDefinition;
-			}
-		}
+                string pdb = fileName + ".pdb";
+                if (File.Exists(pdb))
+                    parameters.SymbolStream = MemoryStreamFor(pdb);
 
-		// find assemblyname in assembly's references
-		private string FindFile(AssemblyNameReference name)
-		{
-			string fileName = assemblyReferences.FirstOrDefault(r => Path.GetFileName(r) == name.Name + ".dll");
-			if (fileName != null)
-			{
-				return fileName;
-			}
+                AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(ms, parameters);
+                assemblyCache.Add(cacheKey, assemblyDefinition);
+                return assemblyDefinition;
+            }
+        }
 
-			// perhaps the type comes from an exe instead
-			fileName = assemblyReferences.FirstOrDefault(r => Path.GetFileName(r) == name.Name + ".exe");
-			if (fileName != null)
-			{
-				return fileName;
-			}
+        // find assemblyname in assembly's references
+        string FindFile(AssemblyNameReference name)
+        {
+            string fileName = assemblyReferences.FirstOrDefault(r => Path.GetFileName(r) == name.Name + ".dll");
+            if (fileName != null)
+                return fileName;
 
-			// Unfortunately the current ICompiledAssembly API only provides direct references.
-			// It is very much possible that a postprocessor ends up investigating a type in a directly
-			// referenced assembly, that contains a field that is not in a directly referenced assembly.
-			// if we don't do anything special for that situation, it will fail to resolve.  We should fix this
-			// in the ILPostProcessing API. As a workaround, we rely on the fact here that the indirect references
-			// are always located next to direct references, so we search in all directories of direct references we
-			// got passed, and if we find the file in there, we resolve to it.
-			foreach (string parentDir in assemblyReferences.Select(Path.GetDirectoryName).Distinct())
-			{
-				string candidate = Path.Combine(parentDir, name.Name + ".dll");
-				if (File.Exists(candidate))
-				{
-					return candidate;
-				}
-			}
+            // perhaps the type comes from an exe instead
+            fileName = assemblyReferences.FirstOrDefault(r => Path.GetFileName(r) == name.Name + ".exe");
+            if (fileName != null)
+                return fileName;
 
-			return null;
-		}
+            // Unfortunately the current ICompiledAssembly API only provides direct references.
+            // It is very much possible that a postprocessor ends up investigating a type in a directly
+            // referenced assembly, that contains a field that is not in a directly referenced assembly.
+            // if we don't do anything special for that situation, it will fail to resolve.  We should fix this
+            // in the ILPostProcessing API. As a workaround, we rely on the fact here that the indirect references
+            // are always located next to direct references, so we search in all directories of direct references we
+            // got passed, and if we find the file in there, we resolve to it.
+            foreach (string parentDir in assemblyReferences.Select(Path.GetDirectoryName).Distinct())
+            {
+                string candidate = Path.Combine(parentDir, name.Name + ".dll");
+                if (File.Exists(candidate))
+                    return candidate;
+            }
 
-		// open file as MemoryStream
-		// attempts multiple times, not sure why..
-		private static MemoryStream MemoryStreamFor(string fileName)
-		{
-			return Retry(10, TimeSpan.FromSeconds(1), () =>
-			{
-				byte[] byteArray;
-				using (var fs = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-				{
-					byteArray = new byte[fs.Length];
-					int readLength = fs.Read(byteArray, 0, (int)fs.Length);
-					if (readLength != fs.Length)
-					{
-						throw new InvalidOperationException("File read length is not full length of file.");
-					}
-				}
+            return null;
+        }
 
-				return new MemoryStream(byteArray);
-			});
-		}
+        // open file as MemoryStream
+        // attempts multiple times, not sure why..
+        static MemoryStream MemoryStreamFor(string fileName)
+        {
+            return Retry(10, TimeSpan.FromSeconds(1), () =>
+            {
+                byte[] byteArray;
+                using (FileStream fs = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    byteArray = new byte[fs.Length];
+                    int readLength = fs.Read(byteArray, 0, (int)fs.Length);
+                    if (readLength != fs.Length)
+                        throw new InvalidOperationException("File read length is not full length of file.");
+                }
 
-		private static MemoryStream Retry(int retryCount, TimeSpan waitTime, Func<MemoryStream> func)
-		{
-			try
-			{
-				return func();
-			}
-			catch (IOException)
-			{
-				if (retryCount == 0)
-				{
-					throw;
-				}
+                return new MemoryStream(byteArray);
+            });
+        }
 
-				Console.WriteLine($"Caught IO Exception, trying {retryCount} more times");
-				Thread.Sleep(waitTime);
-				return Retry(retryCount - 1, waitTime, func);
-			}
-		}
+        static MemoryStream Retry(int retryCount, TimeSpan waitTime, Func<MemoryStream> func)
+        {
+            try
+            {
+                return func();
+            }
+            catch (IOException)
+            {
+                if (retryCount == 0)
+                    throw;
+                Console.WriteLine($"Caught IO Exception, trying {retryCount} more times");
+                Thread.Sleep(waitTime);
+                return Retry(retryCount - 1, waitTime, func);
+            }
+        }
 
-		// if the CompiledAssembly's AssemblyDefinition is known, we can add it
-		public void SetAssemblyDefinitionForCompiledAssembly(AssemblyDefinition assemblyDefinition)
-		{
-			selfAssembly = assemblyDefinition;
-		}
-	}
+        // if the CompiledAssembly's AssemblyDefinition is known, we can add it
+        public void SetAssemblyDefinitionForCompiledAssembly(AssemblyDefinition assemblyDefinition)
+        {
+            selfAssembly = assemblyDefinition;
+        }
+    }
 }
 #endif

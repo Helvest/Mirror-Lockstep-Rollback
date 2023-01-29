@@ -18,132 +18,126 @@ using Unity.CompilationPipeline.Common.ILPostProcessing;
 
 namespace Mirror.Weaver
 {
-	public class ILPostProcessorHook : ILPostProcessor
-	{
-		// from CompilationFinishedHook
-		private const string MirrorRuntimeAssemblyName = "Mirror";
+    public class ILPostProcessorHook : ILPostProcessor
+    {
+        // from CompilationFinishedHook
+        const string MirrorRuntimeAssemblyName = "Mirror";
 
-		// ILPostProcessor is invoked by Unity.
-		// we can not tell it to ignore certain assemblies before processing.
-		// add a 'ignore' define for convenience.
-		// => WeaverTests/WeaverAssembler need it to avoid Unity running it
-		public const string IgnoreDefine = "ILPP_IGNORE";
+        // ILPostProcessor is invoked by Unity.
+        // we can not tell it to ignore certain assemblies before processing.
+        // add a 'ignore' define for convenience.
+        // => WeaverTests/WeaverAssembler need it to avoid Unity running it
+        public const string IgnoreDefine = "ILPP_IGNORE";
 
-		// we can't use Debug.Log in ILPP, so we need a custom logger
-		private ILPostProcessorLogger Log = new ILPostProcessorLogger();
+        // we can't use Debug.Log in ILPP, so we need a custom logger
+        ILPostProcessorLogger Log = new ILPostProcessorLogger();
 
-		// ???
-		public override ILPostProcessor GetInstance()
-		{
-			return this;
-		}
+        // ???
+        public override ILPostProcessor GetInstance() => this;
 
-		// check if assembly has the 'ignore' define
-		private static bool HasDefine(ICompiledAssembly assembly, string define)
-		{
-			return assembly.Defines != null &&
-assembly.Defines.Contains(define);
-		}
+        // check if assembly has the 'ignore' define
+        static bool HasDefine(ICompiledAssembly assembly, string define) =>
+            assembly.Defines != null &&
+            assembly.Defines.Contains(define);
 
-		// process Mirror, or anything that references Mirror
-		public override bool WillProcess(ICompiledAssembly compiledAssembly)
-		{
-			// compiledAssembly.References are file paths:
-			//   Library/Bee/artifacts/200b0aE.dag/Mirror.CompilerSymbols.dll
-			//   Assets/Mirror/Plugins/Mono.Cecil/Mono.CecilX.dll
-			//   /Applications/Unity/Hub/Editor/2021.2.0b6_apple_silicon/Unity.app/Contents/NetStandard/ref/2.1.0/netstandard.dll
-			//
-			// log them to see:
-			//     foreach (string reference in compiledAssembly.References)
-			//         LogDiagnostics($"{compiledAssembly.Name} references {reference}");
-			bool relevant = compiledAssembly.Name == MirrorRuntimeAssemblyName ||
-							compiledAssembly.References.Any(filePath => Path.GetFileNameWithoutExtension(filePath) == MirrorRuntimeAssemblyName);
-			bool ignore = HasDefine(compiledAssembly, IgnoreDefine);
-			return relevant && !ignore;
-		}
+        // process Mirror, or anything that references Mirror
+        public override bool WillProcess(ICompiledAssembly compiledAssembly)
+        {
+            // compiledAssembly.References are file paths:
+            //   Library/Bee/artifacts/200b0aE.dag/Mirror.CompilerSymbols.dll
+            //   Assets/Mirror/Plugins/Mono.Cecil/Mono.CecilX.dll
+            //   /Applications/Unity/Hub/Editor/2021.2.0b6_apple_silicon/Unity.app/Contents/NetStandard/ref/2.1.0/netstandard.dll
+            //
+            // log them to see:
+            //     foreach (string reference in compiledAssembly.References)
+            //         LogDiagnostics($"{compiledAssembly.Name} references {reference}");
+            bool relevant = compiledAssembly.Name == MirrorRuntimeAssemblyName ||
+                            compiledAssembly.References.Any(filePath => Path.GetFileNameWithoutExtension(filePath) == MirrorRuntimeAssemblyName);
+            bool ignore = HasDefine(compiledAssembly, IgnoreDefine);
+            return relevant && !ignore;
+        }
 
-		public override ILPostProcessResult Process(ICompiledAssembly compiledAssembly)
-		{
-			//Log.Warning($"Processing {compiledAssembly.Name}");
+        public override ILPostProcessResult Process(ICompiledAssembly compiledAssembly)
+        {
+            //Log.Warning($"Processing {compiledAssembly.Name}");
 
-			// load the InMemoryAssembly peData into a MemoryStream
-			byte[] peData = compiledAssembly.InMemoryAssembly.PeData;
-			//LogDiagnostics($"  peData.Length={peData.Length} bytes");
-			using (var stream = new MemoryStream(peData))
-			using (var asmResolver = new ILPostProcessorAssemblyResolver(compiledAssembly, Log))
-			{
-				// we need to load symbols. otherwise we get:
-				// "(0,0): error Mono.CecilX.Cil.SymbolsNotFoundException: No symbol found for file: "
-				using (var symbols = new MemoryStream(compiledAssembly.InMemoryAssembly.PdbData))
-				{
-					var readerParameters = new ReaderParameters
-					{
-						SymbolStream = symbols,
-						ReadWrite = true,
-						ReadSymbols = true,
-						AssemblyResolver = asmResolver,
-						// custom reflection importer to fix System.Private.CoreLib
-						// not being found in custom assembly resolver above.
-						ReflectionImporterProvider = new ILPostProcessorReflectionImporterProvider()
-					};
-					using (var asmDef = AssemblyDefinition.ReadAssembly(stream, readerParameters))
-					{
-						// resolving a Mirror.dll type like NetworkServer while
-						// weaving Mirror.dll does not work. it throws a
-						// NullReferenceException in WeaverTypes.ctor
-						// when Resolve() is called on the first Mirror type.
-						// need to add the AssemblyDefinition itself to use.
-						asmResolver.SetAssemblyDefinitionForCompiledAssembly(asmDef);
+            // load the InMemoryAssembly peData into a MemoryStream
+            byte[] peData = compiledAssembly.InMemoryAssembly.PeData;
+            //LogDiagnostics($"  peData.Length={peData.Length} bytes");
+            using (MemoryStream stream = new MemoryStream(peData))
+            using (ILPostProcessorAssemblyResolver asmResolver = new ILPostProcessorAssemblyResolver(compiledAssembly, Log))
+            {
+                // we need to load symbols. otherwise we get:
+                // "(0,0): error Mono.CecilX.Cil.SymbolsNotFoundException: No symbol found for file: "
+                using (MemoryStream symbols = new MemoryStream(compiledAssembly.InMemoryAssembly.PdbData))
+                {
+                    ReaderParameters readerParameters = new ReaderParameters{
+                        SymbolStream = symbols,
+                        ReadWrite = true,
+                        ReadSymbols = true,
+                        AssemblyResolver = asmResolver,
+                        // custom reflection importer to fix System.Private.CoreLib
+                        // not being found in custom assembly resolver above.
+                        ReflectionImporterProvider = new ILPostProcessorReflectionImporterProvider()
+                    };
+                    using (AssemblyDefinition asmDef = AssemblyDefinition.ReadAssembly(stream, readerParameters))
+                    {
+                        // resolving a Mirror.dll type like NetworkServer while
+                        // weaving Mirror.dll does not work. it throws a
+                        // NullReferenceException in WeaverTypes.ctor
+                        // when Resolve() is called on the first Mirror type.
+                        // need to add the AssemblyDefinition itself to use.
+                        asmResolver.SetAssemblyDefinitionForCompiledAssembly(asmDef);
 
-						// weave this assembly.
-						var weaver = new Weaver(Log);
-						if (weaver.Weave(asmDef, asmResolver, out bool modified))
-						{
-							//Log.Warning($"Weaving succeeded for: {compiledAssembly.Name}");
+                        // weave this assembly.
+                        Weaver weaver = new Weaver(Log);
+                        if (weaver.Weave(asmDef, asmResolver, out bool modified))
+                        {
+                            //Log.Warning($"Weaving succeeded for: {compiledAssembly.Name}");
 
-							// write if modified
-							if (modified)
-							{
-								// when weaving Mirror.dll with ILPostProcessor,
-								// Weave() -> WeaverTypes -> resolving the first
-								// type in Mirror.dll adds a reference to
-								// Mirror.dll even though we are in Mirror.dll.
-								// -> this would throw an exception:
-								//    "Mirror references itself" and not compile
-								// -> need to detect and fix manually here
-								if (asmDef.MainModule.AssemblyReferences.Any(r => r.Name == asmDef.Name.Name))
-								{
-									asmDef.MainModule.AssemblyReferences.Remove(asmDef.MainModule.AssemblyReferences.First(r => r.Name == asmDef.Name.Name));
-									//Log.Warning($"fixed self referencing Assembly: {asmDef.Name.Name}");
-								}
+                            // write if modified
+                            if (modified)
+                            {
+                                // when weaving Mirror.dll with ILPostProcessor,
+                                // Weave() -> WeaverTypes -> resolving the first
+                                // type in Mirror.dll adds a reference to
+                                // Mirror.dll even though we are in Mirror.dll.
+                                // -> this would throw an exception:
+                                //    "Mirror references itself" and not compile
+                                // -> need to detect and fix manually here
+                                if (asmDef.MainModule.AssemblyReferences.Any(r => r.Name == asmDef.Name.Name))
+                                {
+                                    asmDef.MainModule.AssemblyReferences.Remove(asmDef.MainModule.AssemblyReferences.First(r => r.Name == asmDef.Name.Name));
+                                    //Log.Warning($"fixed self referencing Assembly: {asmDef.Name.Name}");
+                                }
 
-								var peOut = new MemoryStream();
-								var pdbOut = new MemoryStream();
-								var writerParameters = new WriterParameters
-								{
-									SymbolWriterProvider = new PortablePdbWriterProvider(),
-									SymbolStream = pdbOut,
-									WriteSymbols = true
-								};
+                                MemoryStream peOut = new MemoryStream();
+                                MemoryStream pdbOut = new MemoryStream();
+                                WriterParameters writerParameters = new WriterParameters
+                                {
+                                    SymbolWriterProvider = new PortablePdbWriterProvider(),
+                                    SymbolStream = pdbOut,
+                                    WriteSymbols = true
+                                };
 
-								asmDef.Write(peOut, writerParameters);
+                                asmDef.Write(peOut, writerParameters);
 
-								var inMemory = new InMemoryAssembly(peOut.ToArray(), pdbOut.ToArray());
-								return new ILPostProcessResult(inMemory, Log.Logs);
-							}
-						}
-						// if anything during Weave() fails, we log an error.
-						// don't need to indicate 'weaving failed' again.
-						// in fact, this would break tests only expecting certain errors.
-						//else Log.Error($"Weaving failed for: {compiledAssembly.Name}");
-					}
-				}
-			}
+                                InMemoryAssembly inMemory = new InMemoryAssembly(peOut.ToArray(), pdbOut.ToArray());
+                                return new ILPostProcessResult(inMemory, Log.Logs);
+                            }
+                        }
+                        // if anything during Weave() fails, we log an error.
+                        // don't need to indicate 'weaving failed' again.
+                        // in fact, this would break tests only expecting certain errors.
+                        //else Log.Error($"Weaving failed for: {compiledAssembly.Name}");
+                    }
+                }
+            }
 
-			// always return an ILPostProcessResult with Logs.
-			// otherwise we won't see Logs if weaving failed.
-			return new ILPostProcessResult(compiledAssembly.InMemoryAssembly, Log.Logs);
-		}
-	}
+            // always return an ILPostProcessResult with Logs.
+            // otherwise we won't see Logs if weaving failed.
+            return new ILPostProcessResult(compiledAssembly.InMemoryAssembly, Log.Logs);
+        }
+    }
 }
 #endif

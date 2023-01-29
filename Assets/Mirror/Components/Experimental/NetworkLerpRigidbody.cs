@@ -2,92 +2,86 @@ using UnityEngine;
 
 namespace Mirror.Experimental
 {
-	[AddComponentMenu("Network/ Experimental/Network Lerp Rigidbody")]
-	[HelpURL("https://mirror-networking.gitbook.io/docs/components/network-lerp-rigidbody")]
-	public class NetworkLerpRigidbody : NetworkBehaviour
-	{
-		[Header("Settings")]
-		[SerializeField] internal Rigidbody target = null;
-		[Tooltip("How quickly current velocity approaches target velocity")]
-		[SerializeField] private float lerpVelocityAmount = 0.5f;
-		[Tooltip("How quickly current position approaches target position")]
-		[SerializeField] private float lerpPositionAmount = 0.5f;
+    [AddComponentMenu("Network/ Experimental/Network Lerp Rigidbody")]
+    [HelpURL("https://mirror-networking.gitbook.io/docs/components/network-lerp-rigidbody")]
+    public class NetworkLerpRigidbody : NetworkBehaviour
+    {
+        [Header("Settings")]
+        [SerializeField] internal Rigidbody target = null;
 
-		[Tooltip("Set to true if moves come from owner client, set to false if moves always come from server")]
-		[SerializeField] private bool clientAuthority = false;
-		private float nextSyncTime;
+        [Tooltip("How quickly current velocity approaches target velocity")]
+        [SerializeField] float lerpVelocityAmount = 0.5f;
 
+        [Tooltip("How quickly current position approaches target position")]
+        [SerializeField] float lerpPositionAmount = 0.5f;
 
-		[SyncVar()]
-		private Vector3 targetVelocity;
+        [Tooltip("Set to true if moves come from owner client, set to false if moves always come from server")]
+        [SerializeField] bool clientAuthority = false;
 
-		[SyncVar()]
-		private Vector3 targetPosition;
+        double nextSyncTime;
 
-		/// <summary>
-		/// Ignore value if is host or client with Authority
-		/// </summary>
-		/// <returns></returns>
-		private bool IgnoreSync => isServer || ClientWithAuthority;
+        [SyncVar()]
+        Vector3 targetVelocity;
 
-		private bool ClientWithAuthority => clientAuthority && hasAuthority;
+        [SyncVar()]
+        Vector3 targetPosition;
 
-		private void OnValidate()
-		{
-			if (target == null)
-			{
-				target = GetComponent<Rigidbody>();
-			}
-		}
+        /// <summary>
+        /// Ignore value if is host or client with Authority
+        /// </summary>
+        bool IgnoreSync => isServer || ClientWithAuthority;
 
-		private void Update()
-		{
-			if (isServer)
-			{
-				SyncToClients();
-			}
-			else if (ClientWithAuthority)
-			{
-				SendToServer();
-			}
-		}
+        bool ClientWithAuthority => clientAuthority && isOwned;
 
-		private void SyncToClients()
-		{
-			targetVelocity = target.velocity;
-			targetPosition = target.position;
-		}
+        void OnValidate()
+        {
+            if (target == null)
+                target = GetComponent<Rigidbody>();
+        }
 
-		private void SendToServer()
-		{
-			float now = Time.time;
-			if (now > nextSyncTime)
-			{
-				nextSyncTime = now + syncInterval;
-				CmdSendState(target.velocity, target.position);
-			}
-		}
+        void Update()
+        {
+            if (isServer)
+                SyncToClients();
+            else if (ClientWithAuthority)
+                SendToServer();
+        }
 
-		[Command]
-		private void CmdSendState(Vector3 velocity, Vector3 position)
-		{
-			target.velocity = velocity;
-			target.position = position;
-			targetVelocity = velocity;
-			targetPosition = position;
-		}
+        void SyncToClients()
+        {
+            targetVelocity = target.velocity;
+            targetPosition = target.position;
+        }
 
-		private void FixedUpdate()
-		{
-			if (IgnoreSync)
-			{ return; }
+        void SendToServer()
+        {
+            double now = NetworkTime.localTime; // Unity 2019 doesn't have Time.timeAsDouble yet
+            if (now > nextSyncTime)
+            {
+                nextSyncTime = now + syncInterval;
+                CmdSendState(target.velocity, target.position);
+            }
+        }
 
-			target.velocity = Vector3.Lerp(target.velocity, targetVelocity, lerpVelocityAmount);
-			target.position = Vector3.Lerp(target.position, targetPosition, lerpPositionAmount);
-			// add velocity to position as position would have moved on server at that velocity
-			target.position += target.velocity * Time.fixedDeltaTime;
+        [Command]
+        void CmdSendState(Vector3 velocity, Vector3 position)
+        {
+            target.velocity = velocity;
+            target.position = position;
+            targetVelocity = velocity;
+            targetPosition = position;
+        }
 
-			// TODO does this also need to sync acceleration so and update velocity?
-		}
-	}
+        void FixedUpdate()
+        {
+            if (IgnoreSync) { return; }
+
+            target.velocity = Vector3.Lerp(target.velocity, targetVelocity, lerpVelocityAmount);
+            target.position = Vector3.Lerp(target.position, targetPosition, lerpPositionAmount);
+            // add velocity to position as position would have moved on server at that velocity
+            target.position += target.velocity * Time.fixedDeltaTime;
+
+            // TODO does this also need to sync acceleration so and update velocity?
+        }
+    }
 }
