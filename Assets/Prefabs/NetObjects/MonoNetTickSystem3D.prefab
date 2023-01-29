@@ -46,5 +46,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   <AutoUpdate>k__BackingField: 1
   _isPhysicUpdated: 0
+  <NetTickSystem3D>k__BackingField:
+    <SendTimeBetweenMessage>k__BackingField: 1
+    useDebug: 0
   autoSimulation: 0
-  useDebug: 0

@@ -9,79 +9,52 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 
 	protected ITickSystem tickSystem = default;
 
-	private Transform _cachedTransform = default;
 	private Rigidbody _rigidbody = default;
 
 	[SerializeField]
 	private Transform _visual = default;
 
-
-	/// <summary>
-	/// Ignore value if is host or client with Authority
-	/// </summary>
-	/// <returns></returns>
-	private bool IgnoreSync => isServer || hasAuthority;
-
 	#endregion
 
 	#region Sync vars
 
-	[SyncVar(hook = nameof(OnPositionChanged))]
-	private Vector3 _position;
+	[SerializeField]
+	[SyncVar]
+	private Vector3 _position = default;
 
-	private void OnPositionChanged(Vector3 _, Vector3 newValue)
+	[SerializeField]
+	[SyncVar]
+	private Vector3 _velocity = default;
+
+	[SerializeField]
+	[SyncVar]
+	private Vector3 _angularVelocity = default;
+
+	[SerializeField]
+	[SyncVar]
+	private Quaternion _rotation = default;
+
+	private void ServerSync()
 	{
-		if (IgnoreSync)
-		{
-			return;
-		}
-
-		//var diff = newValue - _rigidbody.position;
-		//Debug.Log($"OnPositionChanged: {diff.x:00.00000}, {diff.y:00.00000}, {diff.z:00.00000}");
-
-		//Debug.Log($"OnPositionChanged: {newValue.x:00.00000}, {newValue.y:00.00000}, {newValue.z:00.00000}");
-
-		_rigidbody.position = newValue;
+		_position = _rigidbody.position;
+		_velocity = _rigidbody.velocity;
+		_angularVelocity = _rigidbody.angularVelocity;
+		_rotation = _rigidbody.rotation;
 	}
 
-	[SyncVar(hook = nameof(OnVelocityChanged))]
-	private Vector3 _velocity;
-
-	private void OnVelocityChanged(Vector3 _, Vector3 newValue)
+	private void ClientSync()
 	{
-		if (IgnoreSync)
-		{
-			return;
-		}
-
-		_rigidbody.velocity = newValue;
+		_rigidbody.position = _position;
+		_rigidbody.velocity = _velocity;
+		_rigidbody.angularVelocity = _angularVelocity;
+		_rigidbody.rotation = _rotation;
 	}
 
-	[SyncVar(hook = nameof(OnAngularVelocityChanged))]
-	private Vector3 _angularVelocity;
-
-	private void OnAngularVelocityChanged(Vector3 _, Vector3 newValue)
+	public override void OnDeserialize(NetworkReader reader, bool initialState)
 	{
-		if (IgnoreSync)
-		{
-			return;
-		}
+		base.OnDeserialize(reader, initialState);
 
-		_rigidbody.angularVelocity = newValue;
-	}
-
-	[SyncVar(hook = nameof(OnRotationChanged))]
-	private Quaternion _rotation;
-
-	private void OnRotationChanged(Quaternion _, Quaternion newValue)
-	{
-		if (IgnoreSync)
-		{
-			return;
-		}
-
-		//Debug.Log("oldValue: " + oldValue + " | newValue: " + newValue);
-		_rigidbody.rotation = newValue;
+		ClientSync();
 	}
 
 	#endregion
@@ -91,7 +64,6 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 	private void Awake()
 	{
 		TryGetComponent(out _rigidbody);
-		TryGetComponent(out _cachedTransform);
 	}
 
 	private void OnEnable()
@@ -106,14 +78,6 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 	public override void OnStartServer()
 	{
 		ServerSync();
-	}
-
-	private void ServerSync()
-	{
-		_position = _rigidbody.position;
-		_velocity = _rigidbody.velocity;
-		_angularVelocity = _rigidbody.angularVelocity;
-		_rotation = _rigidbody.rotation;
 	}
 
 	#endregion
@@ -154,6 +118,16 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 			_inputSpaceWasPress = true;
 		}
 
+		if (Input.GetKeyDown(KeyCode.A))
+		{
+
+		}
+
+		if (Input.GetKeyDown(KeyCode.Z))
+		{
+
+		}
+
 		if (isServer)
 		{
 			if (Input.GetKeyDown(KeyCode.E))
@@ -188,6 +162,25 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 			var extraRotation = Quaternion.Euler(Mathf.Rad2Deg * tickSystem.ExtraDeltaTime * transform.InverseTransformVector(_angularVelocity));
 			_visual.rotation = _rigidbody.rotation * extraRotation;
 		}
+	}
+
+	#endregion
+
+	#region OnTrigger
+
+	private void OnTriggerEnter(Collider other)
+	{
+		//Debug.Log("OnTriggerEnter: " + tickSystem.FixedFrameCount + " | " + Time.frameCount);
+	}
+
+	private void OnTriggerExit(Collider other)
+	{
+		//Debug.Log("OnTriggerExit: " + tickSystem.FixedFrameCount + " | " + Time.frameCount);
+	}
+
+	private void OnTriggerStay(Collider other)
+	{
+		//Debug.Log("OnTriggerStay: " + tickSystem.FixedFrameCount + " | " + Time.frameCount);
 	}
 
 	#endregion

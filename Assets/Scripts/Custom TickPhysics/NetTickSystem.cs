@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Mirror;
 using TickPhysics;
 using UnityEngine;
 
+[Serializable]
 public abstract class NetTickSystem : TickSystem, INetTickSystem
 {
 
@@ -30,11 +32,15 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 		}
 	}
 
-	[Header("NetTickSystem")]
-
-	[SerializeField]
-	[Range(0f, 2f)]
+	[SerializeField, Range(0f, 10f)]
 	private float _sendTimeBetweenMessage = 1f;
+
+	public float SendTimeBetweenMessage
+	{
+		get => _sendTimeBetweenMessage;
+		//There is not point sending messages faster than the simulation
+		set => _sendTimeBetweenMessage = value < Time.fixedDeltaTime ? Time.fixedDeltaTime : value;
+	}
 
 	private float _nextSendTime = 0;
 
@@ -49,7 +55,6 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 	public virtual void Clear()
 	{
 		StateWasReceive = false;
-		//IsPhysicUpdated = IsPhysicUpdated;
 		SendConfigMessage = false;
 		pastLockstep = 0;
 
@@ -58,10 +63,7 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 		FixedTime = 0;
 		FixedFrameCount = 0;
 
-		if (_sendTimeBetweenMessage < Time.fixedDeltaTime)
-		{
-			_sendTimeBetweenMessage = Time.fixedDeltaTime;
-		}
+		SendTimeBetweenMessage = _sendTimeBetweenMessage;
 
 		_nextSendTime = 0;
 	}
@@ -207,7 +209,7 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 
 	public void ServerUpdate()
 	{
-		//auto: Server send spawn and delta lockstep to all connections
+		//Auto: Server send spawn and delta lockstep to all connections
 		if (SendConfigMessage)
 		{
 			SendConfigMessage = false;

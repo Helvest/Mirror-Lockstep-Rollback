@@ -12,7 +12,7 @@ namespace Mirror
 	[AddComponentMenu("")]
 	[RequireComponent(typeof(NetworkIdentity))]
 	[HelpURL("https://mirror-networking.gitbook.io/docs/guides/networkbehaviour")]
-	public abstract class NetworkBehaviour : MonoBehaviour
+	public class NetworkBehaviour : MonoBehaviour
 	{
 		/// <summary>sync mode for OnSerialize</summary>
 		// hidden because NetworkBehaviourInspector shows it only if has OnSerialize.

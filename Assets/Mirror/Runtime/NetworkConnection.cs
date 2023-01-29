@@ -10,7 +10,7 @@ namespace Mirror
 	{
 
 		public RollbackState rollbackState = RollbackState.NotObserving;
-		public bool isFirstSpawn = false;
+		public bool isFirstSpawn = true;
 		public readonly List<NetworkIdentity> newObserving = new List<NetworkIdentity>();
 
 		public const int LocalConnectionId = 0;

@@ -6,7 +6,7 @@ using Object = UnityEngine.Object;
 
 //Add to NetworkConnection
 //public RollbackState rollbackState = RollbackState.NotObserving;
-//public bool isFirstSpawn = false;
+//public bool isFirstSpawn = true;
 //public readonly List<NetworkIdentity> newObserving = new List<NetworkIdentity>();
 //NetworkConnection.AddToObserving(NetworkIdentity netIdentity)
 //Replace observing.Add(netIdentity);
@@ -291,6 +291,8 @@ namespace Mirror
 
 		public static RollbackMode rollbackMode = default;
 
+		public static bool useDebug = false;
+
 		#region NetworkMessage
 
 		public struct ConfigLockstepMessage : NetworkMessage
@@ -375,14 +377,20 @@ namespace Mirror
 			{
 				uint startFrame = message.presentFrame;
 
-				Debug.Log("FIRST ConfigLockstep receive: " + startFrame);
+				if (useDebug)
+				{
+					Debug.Log("FIRST ConfigLockstep receive: " + startFrame);
+				}
 
 				clientMemory.Clear();
 				clientMemory.firstFrame = message.presentFrame;
 			}
 			else
 			{
-				Debug.Log("ConfigLockstep receive: " + message.pastFrame + " => " + message.presentFrame);
+				if (useDebug)
+				{
+					Debug.Log("ConfigLockstep receive: " + message.pastFrame + " => " + message.presentFrame);
+				}
 			}
 
 			rollbackMode = message.rollbackMode;
@@ -419,7 +427,10 @@ namespace Mirror
 
 			_isRecevingLockstep = true;
 
-			Debug.Log("DeltaLockstep receive: " + message.pastFrame + " => " + message.presentFrame);
+			if (useDebug)
+			{
+				Debug.Log("DeltaLockstep receive: " + message.pastFrame + " => " + message.presentFrame);
+			}
 
 			var data = RollbackData.GetFromPool();
 
@@ -448,7 +459,10 @@ namespace Mirror
 
 			_isRecevingLockstep = true;
 
-			Debug.Log("FullLockstep receive: " + message.presentFrame);
+			if (useDebug)
+			{
+				Debug.Log("FullLockstep receive: " + message.presentFrame);
+			}
 
 			var data = RollbackData.GetFromPool();
 
@@ -465,7 +479,11 @@ namespace Mirror
 		{
 			if (_isRecevingLockstep)
 			{
-				Debug.Log("EndLockstepMessage");
+				if (useDebug)
+				{
+					Debug.Log("EndLockstepMessage");
+				}
+
 				_isRecevingLockstep = false;
 
 				clientMemory.FinishConstruction();
@@ -694,7 +712,10 @@ namespace Mirror
 						}
 					}
 
-					Debug.Log("Apply: " + presentFrame + " => " + futur.rollbackData.fixedFrameCount);
+					if (useDebug)
+					{
+						Debug.Log("Apply: " + presentFrame + " => " + futur.rollbackData.fixedFrameCount);
+					}
 
 					foreach (var objectData in futur.ObjectDataDict.Values)
 					{
@@ -808,7 +829,10 @@ namespace Mirror
 
 		public static void CreatePresentLockStep(Lockstep newLockstep)
 		{
-			//Debug.Log("CreatePresentLockStep");
+			if (useDebug)
+			{
+				Debug.Log("CreatePresentLockStep");
+			}
 
 			foreach (var identity in NetworkClient.spawned.Values)
 			{
@@ -826,8 +850,6 @@ namespace Mirror
 		#region SendLockstepMessage
 
 		private static bool _broadcastLockstep = false;
-
-
 
 		public static void BroacastNextLockstep()
 		{
@@ -866,6 +888,16 @@ namespace Mirror
 
 		private static void BroadcastToConnection(NetworkConnectionToClient connection)
 		{
+			// Check for null, because object could have been spawn
+			// and then destroy even before sending a single message
+			for (int i = connection.newObserving.Count - 1; i >= 0; i--)
+			{
+				if (connection.newObserving[i] == null)
+				{
+					connection.newObserving.RemoveAt(i);
+				}
+			}
+
 			bool spawn = connection.newObserving.Count > 0;
 
 			if (spawn)

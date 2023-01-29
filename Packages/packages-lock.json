@@ -5,14 +5,14 @@
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "478f1373584ad89e7a6a727420320a92f3a69d42"
+      "hash": "4ce5e4c6f4fcc38bc9966ae1af18daf26e5bfad0"
     },
     "com.helvest.stypemachine": {
       "version": "https://github.com/Helvest/Unity-Package-Stype-Machine.git",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "8c1ecc6c90dc337e431c6a2e3d0a9a00355084ef"
+      "hash": "81961539f6a50ed9b915b79db956a6a0676290e1"
     },
     "com.helvest.tickphysic": {
       "version": "https://github.com/Helvest/Unity-Package-Tick-Physic.git",
@@ -29,7 +29,7 @@
       "url": "https://packages.unity.com"
     },
     "com.unity.ide.visualstudio": {
-      "version": "2.0.16",
+      "version": "2.0.17",
       "depth": 0,
       "source": "registry",
       "dependencies": {

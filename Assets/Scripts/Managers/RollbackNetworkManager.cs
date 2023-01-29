@@ -9,6 +9,7 @@ namespace Mirror
 		#region Fields
 
 		private static RollbackNetworkManager _singleton;
+
 		public static new RollbackNetworkManager singleton
 		{
 			get
@@ -37,6 +38,8 @@ namespace Mirror
 
 		[SerializeField]
 		private RollbackMode _rollbackMode = default;
+
+		public bool useDebug = false;
 
 		#endregion
 
@@ -134,7 +137,11 @@ namespace Mirror
 
 		public virtual void Update()
 		{
-			if (RollbackSystemIsReady)// && (IsServer || IsClient))
+#if DEBUG
+			Rollback.useDebug = useDebug;
+#endif
+
+			if (RollbackSystemIsReady)
 			{
 				UpdateRollback();
 			}

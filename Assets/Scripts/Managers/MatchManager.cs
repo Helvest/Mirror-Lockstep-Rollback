@@ -11,10 +11,10 @@ public class MatchManager : NetworkBehaviour
 	protected ITickSystem tickSystem = default;
 
 	[SerializeField]
-	private List<GameObject> _pawnableArray = default;
+	private List<NetworkBehaviour> _pawnableArray = default;
 
-	[SerializeField]
-	private GameObject _prefab = default;
+	[SyncVar]
+	public List<NetworkBehaviour> netGoList = new();
 
 	#endregion
 
@@ -39,9 +39,8 @@ public class MatchManager : NetworkBehaviour
 		foreach (var item in _pawnableArray)
 		{
 			var instance = Instantiate(item);
-			NetworkServer.Spawn(instance);
-
-			goList.Add(instance);
+			NetworkServer.Spawn(instance.gameObject);
+			netGoList.Add(instance);
 		}
 	}
 
@@ -67,28 +66,9 @@ public class MatchManager : NetworkBehaviour
 			{
 				tickSystem.IsPhysicUpdated = !tickSystem.IsPhysicUpdated;
 			}
-
-			if (Input.GetKeyDown(KeyCode.M))
-			{
-				var newBall = Instantiate(_prefab);
-				NetworkServer.Spawn(newBall);
-
-				goList.Add(newBall);
-			}
-
-			if (Input.GetKeyDown(KeyCode.L))
-			{
-				if (goList.Count > 0)
-				{
-					var ball = goList[0];
-					goList.RemoveAt(0);
-					NetworkServer.Destroy(ball);
-				}
-			}
 		}
 	}
 
-	public readonly SyncList<GameObject> goList = new();
 
 	#endregion
 

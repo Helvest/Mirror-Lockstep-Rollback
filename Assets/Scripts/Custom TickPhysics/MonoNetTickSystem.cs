@@ -17,7 +17,7 @@ public abstract class MonoNetTickSystem : MonoTickSystem, INetTickSystem
 
 	protected override void OnEnable()
 	{
-		//Clear();
+		Clear();
 
 		base.OnEnable();
 

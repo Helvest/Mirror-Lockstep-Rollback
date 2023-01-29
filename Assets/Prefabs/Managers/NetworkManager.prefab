@@ -64,8 +64,10 @@ MonoBehaviour:
   spawnPrefabs:
   - {fileID: 8115066778614826000, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
   - {fileID: 830971732508115933, guid: 6ee84ddd87c604644bdfd5194b7989b6, type: 3}
+  - {fileID: 8571282354075680951, guid: 0cd4d23100c72234aaca9a919a84c677, type: 3}
   _autoStartRollback: 0
   _rollbackMode: 0
+  useDebug: 0
   <TM>k__BackingField: {fileID: 0}
 --- !u!114 &2394090620823507203
 MonoBehaviour:
