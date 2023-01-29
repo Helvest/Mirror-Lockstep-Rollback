@@ -47,6 +47,6 @@ MonoBehaviour:
   <AutoUpdate>k__BackingField: 1
   _isPhysicUpdated: 0
   <NetTickSystem3D>k__BackingField:
-    <SendTimeBetweenMessage>k__BackingField: 1
+    _sendTimeBetweenMessage: 3
     useDebug: 0
   autoSimulation: 0

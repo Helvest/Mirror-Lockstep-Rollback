@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Principal;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -21,14 +22,18 @@ using Object = UnityEngine.Object;
 // - Replace NetworkServer.Broadcast();
 // - by Rollback.Broadcast();
 
-//Add to the end of NetworkClient.NetworkEarlyUpdate()
-// - Rollback.OnClientNetworkEndOfEarlyUpdate();
+//In NetworkServer.DestroyObject(NetworkIdentity identity, DestroyMode mode)
+// - Add if (!identity.useRollback)
+// - around SendToObservers(identity, new ObjectDestroyMessage { netId = identity.netId });
 
 //In NetworkClient.RegisterSystemHandlers(bool hostMode)
 // - Replace RegisterHandler<SpawnMessage>(OnSpawn);
 // - By RegisterHandler<SpawnMessage>(Rollback.OnSpawn);
 // - Replace RegisterHandler<EntityStateMessage>(OnEntityStateMessage);
 // - By RegisterHandler<EntityStateMessage>(Rollback.OnEntityStateMessage);
+
+//Add to the end of NetworkClient.NetworkEarlyUpdate()
+// - Rollback.OnClientNetworkEndOfEarlyUpdate();
 
 
 namespace Mirror
