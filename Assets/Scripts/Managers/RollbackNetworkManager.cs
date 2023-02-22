@@ -206,6 +206,11 @@ namespace Mirror
 					_connNoMoreReadyForRollback.Add(conn);
 				}
 			}
+
+			if (useDebug)
+			{
+				Debug.Log("ChangeRollbackState - conn: " + conn.connectionId + " | " + conn.rollbackState);
+			}
 		}
 
 		private void AddConnReadyForRollback()
@@ -217,6 +222,11 @@ namespace Mirror
 
 			foreach (var conn in _newConnReadyForRollback)
 			{
+				if (useDebug)
+				{
+					Debug.Log("AddConnReadyForRollback - conn: " + conn.connectionId);
+				}
+
 				NetworkServer.SetClientReady(conn);
 			}
 
@@ -237,6 +247,13 @@ namespace Mirror
 				if (conn.rollbackState != RollbackState.NotObserving)
 				{
 					continue;
+				}
+
+				_newConnReadyForRollback.Remove(conn);
+
+				if (useDebug)
+				{
+					Debug.Log("RemoveConnNoMoreReadyForRollback - conn: " + conn.connectionId);
 				}
 
 				foreach (var identity in NetworkServer.spawned.Values)

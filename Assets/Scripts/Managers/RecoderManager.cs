@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Mirror;
 using UnityEngine;
 
@@ -22,10 +23,10 @@ public class RecoderManager : MonoBehaviour
 
 	#endregion
 
-	//private readonly Timeline _serverRecording = new Timeline();
+	private readonly SortedList<uint, Lockstep> _serverRecording = new();
 
 	private void OnLockStepIsFinish(uint frame, Lockstep lockstep)
 	{
-		//_serverRecording.Add(frame, lockstep);
+		_serverRecording.Add(frame, new Lockstep(lockstep));
 	}
 }

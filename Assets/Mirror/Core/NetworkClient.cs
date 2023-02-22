@@ -1249,18 +1249,6 @@ namespace Mirror
             }
         }
 
-        // client-only mode callbacks //////////////////////////////////////////
-        static void OnEntityStateMessage(EntityStateMessage message)
-        {
-            // Debug.Log($"NetworkClient.OnUpdateVarsMessage {msg.netId}");
-            if (spawned.TryGetValue(message.netId, out NetworkIdentity identity) && identity != null)
-            {
-                using (NetworkReaderPooled reader = NetworkReaderPool.Get(message.payload))
-                    identity.DeserializeClient(reader, false);
-            }
-            else Debug.LogWarning($"Did not find target for sync message for {message.netId} . Note: this can be completely normal because UDP messages may arrive out of order, so this message might have arrived after a Destroy message.");
-        }
-
         static void OnRPCMessage(RpcMessage message)
         {
             // Debug.Log($"NetworkClient.OnRPCMessage hash:{message.functionHash} netId:{message.netId}");

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Principal;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -115,23 +114,40 @@ namespace Mirror
 
 		#endregion
 
+		#region Fields
+
 		public RollbackData rollbackData;
 
 		public uint pastFrame;
 
-		public readonly Dictionary<uint, ObjectData> ObjectDataDict = new Dictionary<uint, ObjectData>();
+		public readonly Dictionary<uint, ObjectData> objectDataDict = new Dictionary<uint, ObjectData>();
 
-		public readonly Dictionary<uint, ObjectDeltaData> ObjectDeltaDataDict = new Dictionary<uint, ObjectDeltaData>();
+		public readonly Dictionary<uint, ObjectDeltaData> objectDeltaDataDict = new Dictionary<uint, ObjectDeltaData>();
+
+		#endregion
+
+		#region Init
+
+		public Lockstep() { }
+
+		public Lockstep(Lockstep lockstep)
+		{
+			Copy(lockstep);
+		}
 
 		public Lockstep(RollbackData rollbackData)
 		{
 			this.rollbackData = rollbackData;
 		}
 
+		#endregion
+
+		#region End
+
 		public void Reset()
 		{
-			ObjectDataDict.Clear();
-			ObjectDeltaDataDict.Clear();
+			objectDataDict.Clear();
+			objectDeltaDataDict.Clear();
 		}
 
 		public void Clear()
@@ -142,15 +158,51 @@ namespace Mirror
 				rollbackData = null;
 			}
 
-			ObjectDataDict.Clear();
-			ObjectDeltaDataDict.Clear();
+			objectDataDict.Clear();
+			objectDeltaDataDict.Clear();
 		}
+
+		#endregion
 
 		#region Add 
 
 		public void Add(NetworkIdentity networkIdentity)
 		{
-			ObjectDataDict.Add(networkIdentity.netId, networkIdentity.GetObjectData());
+			objectDataDict.Add(networkIdentity.netId, networkIdentity.GetObjectData());
+		}
+
+		#endregion
+
+		#region Copy
+
+		public void Copy(Lockstep lockstep)
+		{
+			if (rollbackData == null)
+			{
+				rollbackData = RollbackData.GetFromPool();
+			}
+
+			rollbackData.Copy(lockstep.rollbackData);
+
+			pastFrame = lockstep.pastFrame;
+
+			objectDataDict.Clear();
+			objectDeltaDataDict.Clear();
+
+			foreach (var item in lockstep.objectDataDict)
+			{
+				objectDataDict.Add(item.Key, item.Value);
+			}
+
+			foreach (var item in lockstep.objectDeltaDataDict)
+			{
+				objectDeltaDataDict.Add(item.Key, item.Value);
+			}
+		}
+
+		public void CopyTo(Lockstep lockstep)
+		{
+			lockstep.Copy(this);
 		}
 
 		#endregion
@@ -163,6 +215,9 @@ namespace Mirror
 
 	public class ClientMemory
 	{
+
+		#region Fields
+
 		public readonly RollbackData rollbackData = new RollbackData();
 
 		public uint firstFrame;
@@ -174,6 +229,38 @@ namespace Mirror
 		public Lockstep inConstruction;
 
 		public bool HaveFutur => futurs.Count > 0;
+
+		#endregion
+
+		#region Construction
+
+		public void StartConstruction(RollbackData data)
+		{
+			inConstruction = Lockstep.GetFromPool(data);
+		}
+
+		public Lockstep FinishConstruction()
+		{
+			uint frame = inConstruction.rollbackData.fixedFrameCount;
+
+			if (futurs.TryGetValue(frame, out var lockstep))
+			{
+				inConstruction.pastFrame = lockstep.pastFrame;
+
+				lockstep.Clear();
+			}
+
+			var lastLockstep = inConstruction;
+
+			futurs[frame] = inConstruction;
+			inConstruction = null;
+
+			return lastLockstep;
+		}
+
+		#endregion
+
+		#region End
 
 		public void Clear()
 		{
@@ -194,30 +281,6 @@ namespace Mirror
 			RemoveAllFutur();
 		}
 
-		#region Construction
-
-		public void StartConstruction(RollbackData data)
-		{
-			inConstruction = Lockstep.GetFromPool(data);
-		}
-
-		public void FinishConstruction()
-		{
-			uint frame = inConstruction.rollbackData.fixedFrameCount;
-
-			if (futurs.TryGetValue(frame, out var lockstep))
-			{
-				inConstruction.pastFrame = lockstep.pastFrame;
-
-				lockstep.Clear();
-			}
-
-			futurs[frame] = inConstruction;
-			inConstruction = null;
-		}
-
-		#endregion
-
 		public void RemoveAllFutur()
 		{
 			foreach (var futur in futurs.Values)
@@ -227,6 +290,8 @@ namespace Mirror
 
 			futurs.Clear();
 		}
+
+		#endregion
 
 	}
 
@@ -268,7 +333,7 @@ namespace Mirror
 
 		#endregion
 
-		#region Constructor
+		#region Init
 
 		public RollbackData() { }
 
@@ -277,6 +342,10 @@ namespace Mirror
 			Copy(rollbackData);
 		}
 
+		#endregion
+
+		#region Copy
+
 		public void Copy(RollbackData rollbackData)
 		{
 			isPhysicUpdated = rollbackData.isPhysicUpdated;
@@ -284,6 +353,11 @@ namespace Mirror
 			normalTime = rollbackData.normalTime;
 			fixedTime = rollbackData.fixedTime;
 			fixedFrameCount = rollbackData.fixedFrameCount;
+		}
+
+		public void CopyTo(RollbackData rollbackData)
+		{
+			rollbackData.Copy(this);
 		}
 
 		#endregion
@@ -496,15 +570,17 @@ namespace Mirror
 
 				_isRecevingLockstep = false;
 
-				clientMemory.FinishConstruction();
+				var lockstep = clientMemory.FinishConstruction();
+
+				EventLockstepFinish?.Invoke(lockstep.rollbackData.fixedFrameCount, lockstep);
 			}
 			else
 			{
-				Debug.LogError("EndLockstepMessage");
+				Debug.LogError("Receive EndLockstepMessage outside a lockstep");
 			}
 		}
 
-		public static Action<uint, Lockstep> EventLockstepFinish;
+		public static event Action<uint, Lockstep> EventLockstepFinish;
 
 		#endregion
 
@@ -554,34 +630,37 @@ namespace Mirror
 
 		public static void OnSpawn(SpawnMessage message)
 		{
-			if (_isRecevingLockstep)
-			{
-				bool save = false;
+			NetworkClient.OnSpawn(message);
 
-				//Try get spawned netIdentity
-				if (NetworkClient.spawned.TryGetValue(message.netId, out var netIdentity))
+			if (!_isRecevingLockstep)
+			{
+				//NetworkClient.OnSpawn(message);
+				return;
+			}
+
+			bool save = false;
+
+			//Try get spawned netIdentity
+			if (NetworkClient.spawned.TryGetValue(message.netId, out var netIdentity))
+			{
+				save = netIdentity.useRollback;
+			}
+			//Try get prefab netIdentity
+			else if (NetworkClient.GetPrefab(message.assetId, out var gameObject))
+			{
+				if (gameObject.TryGetComponent(out netIdentity))
 				{
 					save = netIdentity.useRollback;
 				}
-				//Try get prefab netIdentity
-				else if (NetworkClient.GetPrefab(message.assetId, out var gameObject))
-				{
-					if (gameObject.TryGetComponent(out netIdentity))
-					{
-						save = netIdentity.useRollback;
-					}
-				}
-
-				if (save)
-				{
-					var objectData = new ObjectData(message);
-
-					clientMemory.inConstruction.ObjectDataDict.Add(message.netId, objectData);
-					return;
-				}
 			}
 
-			NetworkClient.OnSpawn(message);
+			if (save)
+			{
+				var objectData = new ObjectData(message);
+
+				clientMemory.inConstruction.objectDataDict.Add(message.netId, objectData);
+				//return;
+			}
 		}
 
 		public static void ApplySpawn(SpawnMessage message)
@@ -598,7 +677,8 @@ namespace Mirror
 					return;
 				}
 
-				identity = message.sceneId == 0 ? NetworkClient.SpawnPrefab(message) : NetworkClient.SpawnSceneObject(message.sceneId);
+				identity = message.sceneId == 0 ?
+					NetworkClient.SpawnPrefab(message) : NetworkClient.SpawnSceneObject(message.sceneId);
 
 				NetworkClient.ApplySpawnPayload(identity, message);
 			}
@@ -643,11 +723,11 @@ namespace Mirror
 		{
 			if (_isRecevingLockstep)
 			{
-				//si null, on va supposer que c'est un nouveau rollback object
+				//If null, we'll assume it's a new rollback object
 				if (identity == null || identity.useRollback)
 				{
 					var objectDeltaData = new ObjectDeltaData(message);
-					clientMemory.inConstruction.ObjectDeltaDataDict.Add(message.netId, objectDeltaData);
+					clientMemory.inConstruction.objectDeltaDataDict.Add(message.netId, objectDeltaData);
 					return true;
 				}
 			}
@@ -717,7 +797,7 @@ namespace Mirror
 						//Callback: apply past
 						if (clientMemory.present != null)
 						{
-							PrepareClientSceneForLockstep(clientMemory.present.ObjectDataDict.Keys);
+							PrepareClientSceneForLockstep(clientMemory.present.objectDataDict.Keys);
 							GoToLockstep(clientMemory.present);
 						}
 					}
@@ -727,12 +807,12 @@ namespace Mirror
 						Debug.Log("Apply: " + presentFrame + " => " + futur.rollbackData.fixedFrameCount);
 					}
 
-					foreach (var objectData in futur.ObjectDataDict.Values)
+					foreach (var objectData in futur.objectDataDict.Values)
 					{
 						ApplySpawn(objectData.Message);
 					}
 
-					foreach (var objectDeltaData in futur.ObjectDeltaDataDict.Values)
+					foreach (var objectDeltaData in futur.objectDeltaDataDict.Values)
 					{
 						ApplyEntityState(objectDeltaData.Message);
 					}
@@ -763,14 +843,15 @@ namespace Mirror
 			}
 			else
 			{
-				lastFutur = clientMemory.futurs.Last().Value;
+				//lastFutur = clientMemory.futurs.Last().Value;
+				lastFutur = clientMemory.futurs.Values[^1];
 
-				PrepareClientSceneForLockstep(lastFutur.ObjectDataDict.Keys);
+				PrepareClientSceneForLockstep(lastFutur.objectDataDict.Keys);
 
 				clientMemory.rollbackData.Copy(lastFutur.rollbackData);
 				EventOnLockstepReceive?.Invoke(clientMemory.rollbackData);
 
-				foreach (var objectData in lastFutur.ObjectDataDict.Values)
+				foreach (var objectData in lastFutur.objectDataDict.Values)
 				{
 					ApplySpawn(objectData.Message);
 				}
@@ -793,14 +874,24 @@ namespace Mirror
 				}
 			}
 
-			//Clean scene by destroying not needed netId
+			//Clean scene by destroying and disabling not needed netId
 			foreach (uint netId in _identityToRemove)
 			{
 				if (NetworkClient.spawned.TryGetValue(netId, out var identity))
 				{
 					identity.OnStopClient();
 					NetworkClient.InvokeUnSpawnHandler(identity.assetId, identity.gameObject);
-					Object.Destroy(identity.gameObject);
+
+					if (identity.sceneId == 0)
+					{
+						Object.Destroy(identity.gameObject);
+					}
+					else
+					{
+						identity.Reset();
+						identity.gameObject.SetActive(false);
+					}
+
 					NetworkClient.spawned.Remove(netId);
 				}
 			}
@@ -823,7 +914,15 @@ namespace Mirror
 			{
 				if (NetworkServer.spawned.TryGetValue(item, out var identity))
 				{
-					NetworkServer.Destroy(identity.gameObject);
+					if (identity.sceneId == 0)
+					{
+						NetworkServer.Destroy(identity.gameObject);
+					}
+					else
+					{
+						identity.Reset();
+						identity.gameObject.SetActive(false);
+					}
 				}
 			}
 		}
@@ -831,7 +930,7 @@ namespace Mirror
 		public static void GoToLockstep(Lockstep lockstep)
 		{
 			//Apply or spawn
-			foreach (var objectData in lockstep.ObjectDataDict.Values)
+			foreach (var objectData in lockstep.objectDataDict.Values)
 			{
 				ApplySpawn(objectData.Message);
 			}
@@ -907,58 +1006,65 @@ namespace Mirror
 
 		private static readonly List<NetworkIdentity> _networkIdentities = new List<NetworkIdentity>();
 
-		private static void BroadcastToConnection(NetworkConnectionToClient connection)
+		private static void BroadcastToConnection(NetworkConnectionToClient conn)
 		{
 			// Check for null, because object could have been spawn
 			// and then destroy even before sending a single message
-			for (int i = connection.newObserving.Count - 1; i >= 0; i--)
+			for (int i = conn.newObserving.Count - 1; i >= 0; i--)
 			{
-				if (connection.newObserving[i] == null)
+				if (conn.newObserving[i] == null)
 				{
-					connection.newObserving.RemoveAt(i);
+					conn.newObserving.RemoveAt(i);
 				}
 			}
 
-			bool spawn = connection.newObserving.Count > 0;
+			bool spawn = conn.newObserving.Count > 0;
 
 			if (spawn)
 			{
-				if (connection.isFirstSpawn)
+				if (useDebug)
 				{
-					connection.Send(new ObjectSpawnStartedMessage());
+					Debug.Log("BroadcastToConnection conn: " + conn.connectionId
+					+ " | Count: " + conn.newObserving.Count
+					+ " | rollbackState: " + conn.rollbackState
+					+ " | broadcastLockstep: " + _broadcastLockstep);
 				}
 
-				if (connection.rollbackState == RollbackState.Observing)
+				if (conn.isFirstSpawn)
 				{
-					foreach (var identity in connection.newObserving)
+					conn.Send(new ObjectSpawnStartedMessage());
+				}
+
+				if (conn.rollbackState == RollbackState.Observing)
+				{
+					foreach (var identity in conn.newObserving)
 					{
-						if (identity.useRollback && !_broadcastLockstep)
+						if (conn.connectionId != 0 && identity.useRollback && !_broadcastLockstep)
 						{
 							continue;
 						}
-
-						NetworkServer.SendSpawnMessage(identity, connection);
+						NetworkServer.SendSpawnMessage(identity, conn);
 						_networkIdentities.Add(identity);
 					}
 				}
 				else
 				{
-					foreach (var identity in connection.newObserving)
+					foreach (var identity in conn.newObserving)
 					{
-						NetworkServer.SendSpawnMessage(identity, connection);
+						NetworkServer.SendSpawnMessage(identity, conn);
 					}
 				}
 
-				if (connection.isFirstSpawn)
+				if (conn.isFirstSpawn)
 				{
-					connection.Send(new ObjectSpawnFinishedMessage());
+					conn.Send(new ObjectSpawnFinishedMessage());
 				}
 			}
 
-			connection.isFirstSpawn = false;
+			conn.isFirstSpawn = false;
 
 			// for each entity that this connection is seeing
-			foreach (var identity in connection.observing)
+			foreach (var identity in conn.observing)
 			{
 				// make sure it's not null or destroyed.
 				// (which can happen if someone uses
@@ -975,14 +1081,14 @@ namespace Mirror
 
 						if (rollbackMode == RollbackMode.SendFullData)
 						{
-							NetworkServer.SendSpawnMessage(identity, connection);
+							NetworkServer.SendSpawnMessage(identity, conn);
 							continue;
 						}
 					}
 
 					// get serialization for this entity viewed by this connection
 					// (if anything was serialized this time)
-					var serialization = NetworkServer.SerializeForConnection(identity, connection);
+					var serialization = NetworkServer.SerializeForConnection(identity, conn);
 					if (serialization != null)
 					{
 						var message = new EntityStateMessage
@@ -991,7 +1097,7 @@ namespace Mirror
 							payload = serialization.ToArraySegment()
 						};
 
-						connection.Send(message);
+						conn.Send(message);
 					}
 
 
@@ -1015,45 +1121,41 @@ namespace Mirror
 				// GameObject.Destroy instead of NetworkServer.Destroy.
 				else
 				{
-					Debug.LogWarning("Found 'null' entry in observing list for connectionId=" + connection.connectionId + ". Please call NetworkServer.Destroy to destroy networked objects. Don't use GameObject.Destroy.");
+					Debug.LogWarning("Found 'null' entry in observing list for connectionId=" + conn.connectionId + ". Please call NetworkServer.Destroy to destroy networked objects. Don't use GameObject.Destroy.");
 				}
 			}
 
 			if (spawn)
 			{
-				if (connection.rollbackState == RollbackState.Observing)
+				if (conn.rollbackState == RollbackState.Observing)
 				{
 					foreach (var identity in _networkIdentities)
 					{
-						connection.observing.Add(identity);
-						connection.newObserving.Remove(identity);
+						conn.observing.Add(identity);
+						conn.newObserving.Remove(identity);
 					}
 
 					_networkIdentities.Clear();
 				}
 				else
 				{
-					foreach (var identity in connection.newObserving)
+					foreach (var identity in conn.newObserving)
 					{
-						connection.observing.Add(identity);
+						conn.observing.Add(identity);
 					}
 
-					connection.newObserving.Clear();
-				}
-
-				if (connection.rollbackState == RollbackState.ReadyToObserve)
-				{
-					connection.rollbackState = RollbackState.Observing;
-					connection.Send(new EndLockstepMessage());
-				}
-				else if (_broadcastLockstep && connection.rollbackState == RollbackState.Observing)
-				{
-					connection.Send(new EndLockstepMessage());
+					conn.newObserving.Clear();
 				}
 			}
-			else if (_broadcastLockstep && connection.rollbackState == RollbackState.Observing)
+
+			if (conn.rollbackState == RollbackState.ReadyToObserve)
 			{
-				connection.Send(new EndLockstepMessage());
+				conn.rollbackState = RollbackState.Observing;
+				conn.Send(new EndLockstepMessage());
+			}
+			else if (_broadcastLockstep && conn.rollbackState == RollbackState.Observing)
+			{
+				conn.Send(new EndLockstepMessage());
 			}
 		}
 

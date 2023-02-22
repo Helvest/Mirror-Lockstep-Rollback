@@ -17,9 +17,9 @@ public interface INetTickSystem : ITickSystem
 
 	#region Lockstep Messages
 
-	void SendConfigLockstepMessage<T1>(IEnumerable<T1> connList, bool isFirst) where T1 : NetworkConnectionToClient;
-	void SendDeltaLockstepMessage<T1>(IEnumerable<T1> connList) where T1 : NetworkConnectionToClient;
-	void SendFullLockstepMessage<T1>(IEnumerable<T1> connList) where T1 : NetworkConnectionToClient;
+	void SendConfigLockstepMessage<T1>(IEnumerable<T1> connList, bool isFirst) where T1 : NetworkConnection;
+	void SendDeltaLockstepMessage<T1>(IEnumerable<T1> connList) where T1 : NetworkConnection;
+	void SendFullLockstepMessage<T1>(IEnumerable<T1> connList) where T1 : NetworkConnection;
 	void OnFinishSendLockstepMessage();
 
 	#endregion
