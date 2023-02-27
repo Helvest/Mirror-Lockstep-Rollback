@@ -1219,5 +1219,21 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1621850321552434601, guid: 69ac2dc7baa5965448dea0549d0fabfc, type: 3}
+      propertyPath: _useDebug
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1991146263840818588, guid: 69ac2dc7baa5965448dea0549d0fabfc, type: 3}
+      propertyPath: _isPhysicUpdated
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2500266664172958107, guid: 69ac2dc7baa5965448dea0549d0fabfc, type: 3}
+      propertyPath: useDebug
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2500266664172958107, guid: 69ac2dc7baa5965448dea0549d0fabfc, type: 3}
+      propertyPath: _rollbackMode
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 69ac2dc7baa5965448dea0549d0fabfc, type: 3}

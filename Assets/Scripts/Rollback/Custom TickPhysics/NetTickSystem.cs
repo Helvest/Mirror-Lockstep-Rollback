@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Mirror;
 using TickPhysics;
 using UnityEngine;
+using static Mirror.Rollback;
 
 [Serializable]
 public abstract class NetTickSystem : TickSystem, INetTickSystem
@@ -131,10 +132,9 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 
 	public void SendConfigLockstepMessage<T1>(IEnumerable<T1> connList, bool isFirst) where T1 : NetworkConnection
 	{
-		var lockstepMessage = new Rollback.ConfigLockstepMessage()
+		var lockstepMessage = new ConfigLockstepMessage()
 		{
 			isFirst = isFirst,
-			rollbackMode = Rollback.rollbackMode,
 			isPhysicUpdated = IsPhysicUpdated,
 			timeAtSimulation = TimeAtSimulation,
 			normalTime = NormalTime,
@@ -143,23 +143,12 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 			presentFrame = FixedFrameCount
 		};
 
-		if (useDebug)
-		{
-			Debug.Log("SendConfigLockstepMessage - isFirst: " + isFirst
-				+ " | isPhysicUpdated: " + lockstepMessage.isPhysicUpdated);
-		}
-
-		SendMessage(connList, lockstepMessage);
-
-		if (!isFirst)
-		{
-			Rollback.BroacastNextLockstep();
-		}
+		Rollback.SendConfigLockstepMessage(lockstepMessage, connList);
 	}
 
 	public void SendDeltaLockstepMessage<T1>(IEnumerable<T1> connList) where T1 : NetworkConnection
 	{
-		var lockstepMessage = new Rollback.DeltaLockstepMessage()
+		var lockstepMessage = new DeltaLockstepMessage()
 		{
 			timeAtSimulation = TimeAtSimulation,
 			normalTime = NormalTime,
@@ -168,18 +157,12 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 			presentFrame = FixedFrameCount
 		};
 
-		if (useDebug)
-		{
-			Debug.Log("SendDeltaLockstepMessage: " + lockstepMessage.presentFrame);
-		}
-
-		SendMessage(connList, lockstepMessage);
-		Rollback.BroacastNextLockstep();
+		Rollback.SendDeltaLockstepMessage(lockstepMessage, connList);
 	}
 
 	public void SendFullLockstepMessage<T1>(IEnumerable<T1> connList) where T1 : NetworkConnection
 	{
-		var lockstepMessage = new Rollback.FullLockstepMessage()
+		var lockstepMessage = new FullLockstepMessage()
 		{
 			timeAtSimulation = TimeAtSimulation,
 			normalTime = NormalTime,
@@ -187,13 +170,7 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 			presentFrame = FixedFrameCount
 		};
 
-		if (useDebug)
-		{
-			Debug.Log("SendFullLockstepMessage: " + lockstepMessage.presentFrame);
-		}
-
-		SendMessage(connList, lockstepMessage);
-		Rollback.BroacastNextLockstep();
+		Rollback.SendFullLockstepMessage(lockstepMessage, connList);
 	}
 
 	public void OnFinishSendLockstepMessage()
@@ -257,7 +234,6 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 						case RollbackMode.SendFullData:
 						{
 							SendFullLockstepMessage(rollbackConnections);
-							OnFinishSendLockstepMessage();
 							break;
 						}
 
@@ -274,20 +250,6 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 
 				_nextSendTime = (float)FixedTime + _sendTimeBetweenMessage;
 			}
-		}
-	}
-
-	#endregion
-
-	#region SendMessages
-
-	public static void SendMessage<T1, T2>(IEnumerable<T1> connList, T2 lockstepMessage, int channelId = Channels.Reliable)
-	where T1 : NetworkConnection
-	where T2 : struct, NetworkMessage
-	{
-		foreach (var conn in connList)
-		{
-			conn.Send(lockstepMessage, channelId);
 		}
 	}
 

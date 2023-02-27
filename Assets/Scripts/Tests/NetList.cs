@@ -17,18 +17,7 @@ public class NetList : NetworkBehaviour
 		if (Input.GetKeyDown(KeyCode.M))
 		{
 			var netGo = Instantiate(_prefab);
-
-			if (isServer)
-			{
-				NetworkServer.Spawn(netGo.gameObject);
-			}
-			else
-			{
-				uint fakeID = uint.MaxValue - (uint)NetworkClient.spawned.Count;
-
-				NetworkClient.spawned.Add(fakeID, netGo.netIdentity);
-			}
-
+			Rollback.Spawn(netGo);
 			listBalls.Add(netGo);
 		}
 
@@ -37,16 +26,8 @@ public class NetList : NetworkBehaviour
 			if (listBalls.Count > 0)
 			{
 				var netGo = listBalls[0];
-				if (isServer)
-				{
-					listBalls.RemoveAt(0);
-					NetworkServer.Destroy(netGo.gameObject);
-				}
-				else
-				{
-					listBalls.RemoveAt(0);
-					netGo.gameObject.SetActive(false);
-				}
+				listBalls.RemoveAt(0);
+				Rollback.Destroy(netGo.gameObject);
 			}
 		}
 	}

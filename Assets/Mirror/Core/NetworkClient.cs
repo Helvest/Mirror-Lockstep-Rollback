@@ -1343,7 +1343,7 @@ namespace Mirror
 
         // bootstrap NetworkIdentity by initializing flags and invoking callbacks.
         // used to happen in multiple places, so let's have this in one function.
-        static void BootstrapIdentity(NetworkIdentity identity)
+        internal static void BootstrapIdentity(NetworkIdentity identity)
         {
             // initialize flags before invoking callbacks.
             // this way isClient/isLocalPlayer is correct during callbacks.
@@ -1563,7 +1563,7 @@ namespace Mirror
             }
         }
 
-        static void DestroyObject(uint netId)
+        internal static void DestroyObject(uint netId)
         {
             // Debug.Log($"NetworkClient.OnObjDestroy netId: {netId}");
             if (spawned.TryGetValue(netId, out NetworkIdentity identity) && identity != null)

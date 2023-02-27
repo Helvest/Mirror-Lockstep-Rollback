@@ -50,25 +50,10 @@ public abstract class MonoNetTickSystem : MonoTickSystem, INetTickSystem
 	#endregion
 
 	#region Lockstep Messages
-
+	
 	public void SendConfigLockstepMessage<T1>(IEnumerable<T1> connList, bool isFirst) where T1 : NetworkConnection
 	{
 		NetTickSystem.SendConfigLockstepMessage(connList, isFirst);
-	}
-
-	public void SendDeltaLockstepMessage<T1>(IEnumerable<T1> connList) where T1 : NetworkConnection
-	{
-		NetTickSystem.SendDeltaLockstepMessage(connList);
-	}
-
-	public void SendFullLockstepMessage<T1>(IEnumerable<T1> connList) where T1 : NetworkConnection
-	{
-		NetTickSystem.SendFullLockstepMessage(connList);
-	}
-
-	public void OnFinishSendLockstepMessage()
-	{
-		NetTickSystem.OnFinishSendLockstepMessage();
 	}
 
 	#endregion

@@ -480,7 +480,7 @@ namespace Mirror
 
 		// this is like SendToReadyObservers - but it doesn't check the ready flag on the connection.
 		// this is used for ObjectDestroy messages.
-		static void SendToObservers<T>(NetworkIdentity identity, T message, int channelId = Channels.Reliable)
+		internal static void SendToObservers<T>(NetworkIdentity identity, T message, int channelId = Channels.Reliable)
 			where T : struct, NetworkMessage
 		{
 			// Debug.Log($"Server.SendToObservers {typeof(T)}");
@@ -1437,7 +1437,7 @@ namespace Mirror
 		// sometimes we want to GameObject.Destroy it.
 		// sometimes we want to just unspawn on clients and .Reset() it on server.
 		// => 'bool destroy' isn't obvious enough. it's really destroy OR reset!
-		enum DestroyMode { Destroy, Reset }
+		public enum DestroyMode { Destroy, Reset }
 
 		/// <summary>Destroys this object and corresponding objects on all clients.</summary>
 		// In some cases it is useful to remove an object but not delete it on
@@ -1461,83 +1461,7 @@ namespace Mirror
 
 		static void DestroyObject(NetworkIdentity identity, DestroyMode mode)
 		{
-			// Debug.Log($"DestroyObject instance:{identity.netId}");
-
-			// only call OnRebuildObservers while active,
-			// not while shutting down
-			// (https://github.com/vis2k/Mirror/issues/2977)
-			if (active && aoi)
-			{
-				// This calls user code which might throw exceptions
-				// We don't want this to leave us in bad state
-				try
-				{
-					aoi.OnDestroyed(identity);
-				}
-				catch (Exception e)
-				{
-					Debug.LogException(e);
-				}
-			}
-
-			// remove from NetworkServer (this) dictionary
-			spawned.Remove(identity.netId);
-
-			identity.connectionToClient?.RemoveOwnedObject(identity);
-
-			// send object destroy message to all observers, clear observers
-			if (!identity.useRollback)
-			{
-				SendToObservers(identity, new ObjectDestroyMessage
-				{
-					netId = identity.netId
-				});
-			}
-
-			identity.ClearObservers();
-
-			// in host mode, call OnStopClient/OnStopLocalPlayer manually
-			if (NetworkClient.active && activeHost)
-			{
-				if (identity.isLocalPlayer)
-					identity.OnStopLocalPlayer();
-
-				identity.OnStopClient();
-				// The object may have been spawned with host client ownership,
-				// e.g. a pet so we need to clear hasAuthority and call
-				// NotifyAuthority which invokes OnStopAuthority if hasAuthority.
-				identity.isOwned = false;
-				identity.NotifyAuthority();
-
-				// remove from NetworkClient dictionary
-				NetworkClient.connection.owned.Remove(identity);
-				NetworkClient.spawned.Remove(identity.netId);
-			}
-
-			// we are on the server. call OnStopServer.
-			identity.OnStopServer();
-
-			// are we supposed to GameObject.Destroy() it completely?
-			if (mode == DestroyMode.Destroy)
-			{
-				identity.destroyCalled = true;
-
-				// Destroy if application is running
-				if (Application.isPlaying)
-				{
-					UnityEngine.Object.Destroy(identity.gameObject);
-				}
-				// Destroy can't be used in Editor during tests. use DestroyImmediate.
-				else
-				{
-					GameObject.DestroyImmediate(identity.gameObject);
-				}
-			}
-			// otherwise simply .Reset() and set inactive again
-			else if (mode == DestroyMode.Reset)
-			{
-				identity.Reset();
-			}
+			Rollback.DestroyObject(identity, mode);
 		}
 
 		// interest management /////////////////////////////////////////////////

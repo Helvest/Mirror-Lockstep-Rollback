@@ -18,9 +18,9 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 
 	#region Sync vars
 
-	//[SerializeField]
-	//[SyncVar]
-	//private Vector3 _position = default;
+	[SerializeField]
+	[SyncVar]
+	private Vector3 _position = default;
 
 	[SerializeField]
 	[SyncVar]
@@ -30,24 +30,24 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 	[SyncVar]
 	private Vector3 _angularVelocity = default;
 
-	//[SerializeField]
-	//[SyncVar]
-	//private Quaternion _rotation = default;
+	[SerializeField]
+	[SyncVar]
+	private Quaternion _rotation = default;
 
 	private void ServerSync()
 	{
-		//_position = _rigidbody.position;
+		_position = _rigidbody.position;
 		_velocity = _rigidbody.velocity;
 		_angularVelocity = _rigidbody.angularVelocity;
-		//_rotation = _rigidbody.rotation;
+		_rotation = _rigidbody.rotation;
 	}
 
 	private void ClientSync()
 	{
-		//_rigidbody.position = _position;
+		_rigidbody.position = _position;
 		_rigidbody.velocity = _velocity;
 		_rigidbody.angularVelocity = _angularVelocity;
-		//_rigidbody.rotation = _rotation;
+		_rigidbody.rotation = _rotation;
 	}
 
 	public override void OnDeserialize(NetworkReader reader, bool initialState)

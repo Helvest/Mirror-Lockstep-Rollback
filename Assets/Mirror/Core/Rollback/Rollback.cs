@@ -92,7 +92,7 @@ namespace Mirror
 
 		#region Pool
 
-		private static Queue<Lockstep> _pool = new Queue<Lockstep>();
+		private static readonly Queue<Lockstep> _pool = new Queue<Lockstep>();
 
 		public static Lockstep GetFromPool(RollbackData data)
 		{
@@ -116,19 +116,24 @@ namespace Mirror
 
 		#region Fields
 
-		public RollbackData rollbackData;
+		public RollbackData rollbackData = default;
 
-		public uint pastFrame;
+		public uint pastFrame = 0;
 
-		public readonly Dictionary<uint, ObjectData> objectDataDict = new Dictionary<uint, ObjectData>();
+		public readonly Dictionary<uint, ObjectData> objectDataDict = new();
 
-		public readonly Dictionary<uint, ObjectDeltaData> objectDeltaDataDict = new Dictionary<uint, ObjectDeltaData>();
+		public readonly Dictionary<uint, ObjectDeltaData> objectDeltaDataDict = new();
+
+		public readonly List<uint> destroyList = new();
 
 		#endregion
 
 		#region Init
 
-		public Lockstep() { }
+		public Lockstep()
+		{
+			rollbackData = RollbackData.GetFromPool();
+		}
 
 		public Lockstep(Lockstep lockstep)
 		{
@@ -148,6 +153,7 @@ namespace Mirror
 		{
 			objectDataDict.Clear();
 			objectDeltaDataDict.Clear();
+			destroyList.Clear();
 		}
 
 		public void Clear()
@@ -158,8 +164,7 @@ namespace Mirror
 				rollbackData = null;
 			}
 
-			objectDataDict.Clear();
-			objectDeltaDataDict.Clear();
+			Reset();
 		}
 
 		#endregion
@@ -177,17 +182,13 @@ namespace Mirror
 
 		public void Copy(Lockstep lockstep)
 		{
-			if (rollbackData == null)
-			{
-				rollbackData = RollbackData.GetFromPool();
-			}
+			rollbackData ??= RollbackData.GetFromPool();
 
 			rollbackData.Copy(lockstep.rollbackData);
 
 			pastFrame = lockstep.pastFrame;
 
-			objectDataDict.Clear();
-			objectDeltaDataDict.Clear();
+			Reset();
 
 			foreach (var item in lockstep.objectDataDict)
 			{
@@ -198,6 +199,8 @@ namespace Mirror
 			{
 				objectDeltaDataDict.Add(item.Key, item.Value);
 			}
+
+			destroyList.AddRange(lockstep.destroyList);
 		}
 
 		public void CopyTo(Lockstep lockstep)
@@ -220,13 +223,13 @@ namespace Mirror
 
 		public readonly RollbackData rollbackData = new RollbackData();
 
-		public uint firstFrame;
+		public uint firstFrame = 0;
 
-		public Lockstep present;
+		public Lockstep present = default;
 
 		public readonly SortedList<uint, Lockstep> futurs = new SortedList<uint, Lockstep>();
 
-		public Lockstep inConstruction;
+		public Lockstep inConstruction = default;
 
 		public bool HaveFutur => futurs.Count > 0;
 
@@ -375,9 +378,11 @@ namespace Mirror
 
 		public static bool useDebug = false;
 
+		public static readonly ClientMemory clientMemory = new ClientMemory();
+
 		#endregion
 
-		#region NetworkMessage
+		#region Struct Messages
 
 		public struct ConfigLockstepMessage : NetworkMessage
 		{
@@ -389,6 +394,7 @@ namespace Mirror
 			public double fixedTime;
 			public uint pastFrame;
 			public uint presentFrame;
+			public uint[] destroyList;
 		}
 
 		public struct DeltaLockstepMessage : NetworkMessage
@@ -398,6 +404,7 @@ namespace Mirror
 			public double fixedTime;
 			public uint pastFrame;
 			public uint presentFrame;
+			public uint[] destroyList;
 		}
 
 		public struct FullLockstepMessage : NetworkMessage
@@ -412,29 +419,27 @@ namespace Mirror
 
 		#endregion
 
-		#region Lockstep
-
-		public static readonly ClientMemory clientMemory = new ClientMemory();
+		#region Get
 
 		/*
-		public static bool TryGetObjectData(NetworkIdentity networkIdentity, out ObjectData objectData)
+	public static bool TryGetObjectData(NetworkIdentity networkIdentity, out ObjectData objectData)
+	{
+		if (clientMemory.IsEmpty)
 		{
-			if (clientMemory.IsEmpty)
-			{
-				Debug.LogWarning("Try Get Last Message but timeline is empty");
-			}
-			else
-			{
-				if (clientMemory.present.TryGetValue(networkIdentity.netId, out objectData))
-				{
-					return true;
-				}
-			}
-
-			objectData = default;
-			return false;
+			Debug.LogWarning("Try Get Last Message but timeline is empty");
 		}
-		*/
+		else
+		{
+			if (clientMemory.present.TryGetValue(networkIdentity.netId, out objectData))
+			{
+				return true;
+			}
+		}
+
+		objectData = default;
+		return false;
+	}
+	*/
 
 		public static bool TryGetPresentLockstep(out Lockstep lockstep)
 		{
@@ -443,7 +448,249 @@ namespace Mirror
 			return lockstep != null;
 		}
 
+		public static ObjectData GetObjectData(this NetworkIdentity identity)
+		{
+			var message = identity.GetSpawnMessageOnClient();
+
+			return new ObjectData(message);
+		}
+
+		public static SpawnMessage GetSpawnMessageOnClient(this NetworkIdentity identity)
+		{
+			using NetworkWriterPooled ownerWriter = NetworkWriterPool.Get(), observersWriter = NetworkWriterPool.Get();
+
+			var conn = identity.connectionToServer;
+
+			//bool isOwner = identity.connectionToClient == conn;
+
+			var payload = NetworkServer.CreateSpawnMessagePayload(false, identity, ownerWriter, observersWriter);
+
+			var transform = identity.transform;
+
+			var message = new SpawnMessage
+			{
+				netId = identity.netId,
+				isLocalPlayer = false,
+				isOwner = false,
+				sceneId = identity.sceneId,
+				assetId = identity.assetId,
+				// use local values for VR support
+				position = transform.localPosition,
+				rotation = transform.localRotation,
+				scale = transform.localScale,
+				payload = payload,
+			};
+
+			return message;
+		}
+
+		#endregion
+
+		#region SendMessages
+
+		private static bool _broadcastLockstep = false;
+
+		public static void BroacastNextLockstep()
+		{
+			_broadcastLockstep = true;
+		}
+
+		#region - LockstepMessage
+
+		public static void SendConfigLockstepMessage<T1>(ConfigLockstepMessage message, IEnumerable<T1> connList) where T1 : NetworkConnection
+		{
+			message.rollbackMode = rollbackMode;
+
+			if (useDebug)
+			{
+				Debug.Log("SendConfigLockstepMessage - isFirst: " + message.isFirst
+					+ " | isPhysicUpdated: " + message.isPhysicUpdated);
+			}
+
+			if (message.isFirst)
+			{
+				message.destroyList = new uint[0];
+			}
+			else
+			{
+				message.destroyList = _netIdToDestroy.ToArray();
+				_netIdToDestroy.Clear();
+			}
+
+			SendMessage(message, connList);
+
+			if (!message.isFirst)
+			{
+				BroacastNextLockstep();
+			}
+		}
+
+		public static void SendDeltaLockstepMessage<T1>(DeltaLockstepMessage message, IEnumerable<T1> connList) where T1 : NetworkConnection
+		{
+			message.destroyList = _netIdToDestroy.ToArray();
+			_netIdToDestroy.Clear();
+
+			if (useDebug)
+			{
+				Debug.Log("SendDeltaLockstepMessage: " + message.presentFrame);
+			}
+
+			SendMessage(message, connList);
+			BroacastNextLockstep();
+		}
+
+		public static void SendFullLockstepMessage<T1>(FullLockstepMessage message, IEnumerable<T1> connList) where T1 : NetworkConnection
+		{
+			if (useDebug)
+			{
+				Debug.Log("SendFullLockstepMessage: " + message.presentFrame);
+			}
+
+			SendMessage(message, connList);
+			BroacastNextLockstep();
+		}
+
+		public static void SendMessage<T1, T2>(T1 lockstepMessage, IEnumerable<T2> connList, int channelId = Channels.Reliable)
+		where T1 : struct, NetworkMessage
+		where T2 : NetworkConnection
+		{
+			foreach (var conn in connList)
+			{
+				conn.Send(lockstepMessage, channelId);
+			}
+		}
+
+		#endregion
+
+		#region - SpawnMessage
+		public static void Spawn(NetworkBehaviour netGo)
+		{
+			if (NetworkServer.active)
+			{
+				NetworkServer.Spawn(netGo.gameObject);
+			}
+			else
+			{
+				uint fakeID = uint.MaxValue - (uint)NetworkClient.spawned.Count;
+
+				NetworkClient.spawned.Add(fakeID, netGo.netIdentity);
+			}
+		}
+
+		#endregion
+
+		#region - DestroyObject
+
+		public static void Destroy(GameObject go)
+		{
+			if (NetworkServer.active)
+			{
+				NetworkServer.Destroy(go);
+			}
+			else
+			{
+				go.SetActive(false);
+			}
+		}
+
+		private readonly static List<uint> _netIdToDestroy = new();
+
+		//Replace NetworkServer.DestroyObject(NetworkIdentity identity, DestroyMode mode)
+		internal static void DestroyObject(NetworkIdentity identity, NetworkServer.DestroyMode mode)
+		{
+			// Debug.Log($"DestroyObject instance:{identity.netId}");
+
+			// only call OnRebuildObservers while active,
+			// not while shutting down
+			// (https://github.com/vis2k/Mirror/issues/2977)
+			if (NetworkServer.active && NetworkServer.aoi)
+			{
+				// This calls user code which might throw exceptions
+				// We don't want this to leave us in bad state
+				try
+				{
+					NetworkServer.aoi.OnDestroyed(identity);
+				}
+				catch (Exception e)
+				{
+					Debug.LogException(e);
+				}
+			}
+
+			// remove from NetworkServer (this) dictionary
+			NetworkServer.spawned.Remove(identity.netId);
+
+			identity.connectionToClient?.RemoveOwnedObject(identity);
+
+			if (!identity.useRollback)
+			{
+				// send object destroy message to all observers, clear observers
+				NetworkServer.SendToObservers(identity, new ObjectDestroyMessage
+				{
+					netId = identity.netId
+				});
+			}
+			else if (rollbackMode == RollbackMode.SendDeltaData)
+			{
+				_netIdToDestroy.Add(identity.netId);
+			}
+
+			identity.ClearObservers();
+
+			// in host mode, call OnStopClient/OnStopLocalPlayer manually
+			if (NetworkClient.active && NetworkServer.activeHost)
+			{
+				if (identity.isLocalPlayer)
+					identity.OnStopLocalPlayer();
+
+				identity.OnStopClient();
+				// The object may have been spawned with host client ownership,
+				// e.g. a pet so we need to clear hasAuthority and call
+				// NotifyAuthority which invokes OnStopAuthority if hasAuthority.
+				identity.isOwned = false;
+				identity.NotifyAuthority();
+
+				// remove from NetworkClient dictionary
+				NetworkClient.connection.owned.Remove(identity);
+				NetworkClient.spawned.Remove(identity.netId);
+			}
+
+			// we are on the server. call OnStopServer.
+			identity.OnStopServer();
+
+			// are we supposed to GameObject.Destroy() it completely?
+			if (mode == NetworkServer.DestroyMode.Destroy)
+			{
+				identity.destroyCalled = true;
+
+				// Destroy if application is running
+				if (Application.isPlaying)
+				{
+					Object.Destroy(identity.gameObject);
+				}
+				// Destroy can't be used in Editor during tests. use DestroyImmediate.
+				else
+				{
+					Object.DestroyImmediate(identity.gameObject);
+				}
+			}
+			// otherwise simply .Reset() and set inactive again
+			else if (mode == NetworkServer.DestroyMode.Reset)
+			{
+				identity.Reset();
+			}
+		}
+
+		#endregion
+
+		#endregion
+
+		#region ReceiveMessages
+
+		#region - LockstepMessage
+
 		public static event Action<RollbackData> EventOnLockstepReceive;
+		public static event Action<uint, Lockstep> EventLockstepFinish;
 
 		private static bool _isRecevingLockstep = false;
 
@@ -451,7 +698,7 @@ namespace Mirror
 		{
 			if (_isRecevingLockstep)
 			{
-				Debug.LogError("Receive new lockstep in between another lockstep");
+				Debug.LogError("Receive config lockstep in between another lockstep");
 			}
 
 			_isRecevingLockstep = true;
@@ -500,13 +747,14 @@ namespace Mirror
 			}
 
 			clientMemory.inConstruction.pastFrame = message.pastFrame;
+			clientMemory.inConstruction.destroyList.AddRange(message.destroyList);
 		}
 
 		public static void OnReceiveDeltaLockstep(DeltaLockstepMessage message)
 		{
 			if (_isRecevingLockstep)
 			{
-				Debug.LogError("Receive new lockstep in between another lockstep");
+				Debug.LogError("Receive delta lockstep in between another lockstep");
 			}
 
 			_isRecevingLockstep = true;
@@ -532,13 +780,14 @@ namespace Mirror
 			}
 
 			clientMemory.inConstruction.pastFrame = message.pastFrame;
+			clientMemory.inConstruction.destroyList.AddRange(message.destroyList);
 		}
 
 		public static void OnReceiveFullLockstep(FullLockstepMessage message)
 		{
 			if (_isRecevingLockstep)
 			{
-				Debug.LogError("Receive new lockstep in between another lockstep");
+				Debug.LogError("Receive full lockstep in between another lockstep");
 			}
 
 			_isRecevingLockstep = true;
@@ -561,153 +810,68 @@ namespace Mirror
 
 		public static void OnReceiveEndLockstepMessage(EndLockstepMessage _)
 		{
-			if (_isRecevingLockstep)
-			{
-				if (useDebug)
-				{
-					Debug.Log("EndLockstepMessage");
-				}
-
-				_isRecevingLockstep = false;
-
-				var lockstep = clientMemory.FinishConstruction();
-
-				EventLockstepFinish?.Invoke(lockstep.rollbackData.fixedFrameCount, lockstep);
-			}
-			else
-			{
-				Debug.LogError("Receive EndLockstepMessage outside a lockstep");
-			}
-		}
-
-		public static event Action<uint, Lockstep> EventLockstepFinish;
-
-		#endregion
-
-		#region Get
-
-		public static ObjectData GetObjectData(this NetworkIdentity identity)
-		{
-			var message = identity.GetSpawnMessageOnClient();
-
-			return new ObjectData(message);
-		}
-
-		public static SpawnMessage GetSpawnMessageOnClient(this NetworkIdentity identity)
-		{
-			using NetworkWriterPooled ownerWriter = NetworkWriterPool.Get(), observersWriter = NetworkWriterPool.Get();
-
-			var conn = identity.connectionToServer;
-
-			//bool isOwner = identity.connectionToClient == conn;
-
-			var payload = NetworkServer.CreateSpawnMessagePayload(false, identity, ownerWriter, observersWriter);
-
-			var transform = identity.transform;
-
-			var message = new SpawnMessage
-			{
-				netId = identity.netId,
-				isLocalPlayer = false,
-				isOwner = false,
-				sceneId = identity.sceneId,
-				assetId = identity.assetId,
-				// use local values for VR support
-				position = transform.localPosition,
-				rotation = transform.localRotation,
-				scale = transform.localScale,
-				payload = payload,
-			};
-
-			return message;
-		}
-
-		#endregion
-
-		#region NetworkClient
-
-		#region SpawnMessage
-
-		public static void OnSpawn(SpawnMessage message)
-		{
-			NetworkClient.OnSpawn(message);
-
 			if (!_isRecevingLockstep)
 			{
-				//NetworkClient.OnSpawn(message);
+				Debug.LogError("Receive EndLockstepMessage outside a lockstep");
 				return;
 			}
 
-			bool save = false;
-
-			//Try get spawned netIdentity
-			if (NetworkClient.spawned.TryGetValue(message.netId, out var netIdentity))
+			if (useDebug)
 			{
-				save = netIdentity.useRollback;
+				Debug.Log("EndLockstepMessage");
 			}
-			//Try get prefab netIdentity
-			else if (NetworkClient.GetPrefab(message.assetId, out var gameObject))
+
+			_isRecevingLockstep = false;
+
+			var lockstep = clientMemory.FinishConstruction();
+
+			EventLockstepFinish?.Invoke(lockstep.rollbackData.fixedFrameCount, lockstep);
+		}
+
+		#endregion
+
+		#region - SpawnMessage
+
+		public static void OnSpawn(SpawnMessage message)
+		{
+			if (!_isRecevingLockstep)
 			{
-				if (gameObject.TryGetComponent(out netIdentity))
+				NetworkClient.OnSpawn(message);
+				return;
+			}
+
+			//Try get spawned identity
+			if (!NetworkClient.spawned.TryGetValue(message.netId, out var identity))
+			{
+				//Try get scene identity
+				if (message.sceneId != 0)
 				{
-					save = netIdentity.useRollback;
+					NetworkClient.spawnableObjects.TryGetValue(message.sceneId, out identity);
+				}
+				//Try get prefab identity
+				else if (NetworkClient.GetPrefab(message.assetId, out var gameObject))
+				{
+					gameObject.TryGetComponent(out identity);
 				}
 			}
 
-			if (save)
+			//Debug.Log("OnSpawn: " + identity.useRollback + " | " + message.netId + " | " + message.assetId);
+
+			if (identity.useRollback)
 			{
 				var objectData = new ObjectData(message);
 
 				clientMemory.inConstruction.objectDataDict.Add(message.netId, objectData);
-				//return;
-			}
-		}
-
-		public static void ApplySpawn(SpawnMessage message)
-		{
-			if (NetworkClient.spawned.TryGetValue(message.netId, out var identity))
-			{
-				ApplySpawnPayloadOnClient(identity, message);
 			}
 			else
 			{
-				if (message.assetId == 0 && message.sceneId == 0)
-				{
-					Debug.LogError($"OnSpawn message with netId '{message.netId}' has no AssetId or sceneId");
-					return;
-				}
-
-				identity = message.sceneId == 0 ?
-					NetworkClient.SpawnPrefab(message) : NetworkClient.SpawnSceneObject(message.sceneId);
-
-				NetworkClient.ApplySpawnPayload(identity, message);
-			}
-		}
-
-		public static void ApplySpawnPayloadOnClient(NetworkIdentity identity, SpawnMessage message)
-		{
-			if (message.assetId != 0)
-			{
-				identity.assetId = message.assetId;
-			}
-
-			if (!identity.gameObject.activeSelf)
-			{
-				identity.gameObject.SetActive(true);
-			}
-
-			// deserialize components if any payload
-			// (Count is 0 if there were no components)
-			if (message.payload.Count > 0)
-			{
-				using var payloadReader = NetworkReaderPool.Get(message.payload);
-				identity.DeserializeClient(reader: payloadReader, initialState: true);
+				NetworkClient.OnSpawn(message);
 			}
 		}
 
 		#endregion
 
-		#region EntityStateMessage
+		#region - EntityStateMessage
 
 		public static void OnEntityStateMessage(EntityStateMessage message)
 		{
@@ -759,8 +923,11 @@ namespace Mirror
 
 		#endregion
 
+		#endregion
+
 		#region NetworkEarlyUpdate
 
+		//Updated all frame by NetworkClient.NetworkEarlyUpdate
 		public static void OnClientNetworkEndOfEarlyUpdate()
 		{
 			if (!clientMemory.HaveFutur)
@@ -768,181 +935,322 @@ namespace Mirror
 				return;
 			}
 
-			Lockstep lastFutur = null;
-
-			if (rollbackMode == RollbackMode.SendDeltaData)
+			switch (rollbackMode)
 			{
-				bool needToResetScene = true;
-
-				bool needDebug = clientMemory.futurs.Count > 1;
-
-				uint presentFrame = clientMemory.rollbackData.fixedFrameCount;
-
-				foreach (var data in clientMemory.futurs)
+				case RollbackMode.SendFullData:
 				{
-					var futur = data.Value;
-
-					//if is not next delta or not completed, we wait for next frame
-					if (futur.pastFrame != presentFrame)
-					{
-						break;
-					}
-
-					lastFutur = futur;
-
-					if (needToResetScene)
-					{
-						needToResetScene = false;
-
-						//Callback: apply past
-						if (clientMemory.present != null)
-						{
-							PrepareClientSceneForLockstep(clientMemory.present.objectDataDict.Keys);
-							GoToLockstep(clientMemory.present);
-						}
-					}
-
-					if (useDebug)
-					{
-						Debug.Log("Apply: " + presentFrame + " => " + futur.rollbackData.fixedFrameCount);
-					}
-
-					foreach (var objectData in futur.objectDataDict.Values)
-					{
-						ApplySpawn(objectData.Message);
-					}
-
-					foreach (var objectDeltaData in futur.objectDeltaDataDict.Values)
-					{
-						ApplyEntityState(objectDeltaData.Message);
-					}
-
-					presentFrame = futur.rollbackData.fixedFrameCount;
+					ResolveFullClientLockstep();
+					break;
 				}
-
-				if (lastFutur != null)
+				case RollbackMode.SendDeltaData:
 				{
-					clientMemory.rollbackData.Copy(lastFutur.rollbackData);
-
-					//Save new present
-					if (clientMemory.present == null)
-					{
-						clientMemory.present = lastFutur;
-						clientMemory.futurs.Remove(lastFutur.rollbackData.fixedFrameCount);
-					}
-					else
-					{
-						clientMemory.present.Reset();
-						clientMemory.present.rollbackData.Copy(lastFutur.rollbackData);
-
-						CreatePresentLockStep(clientMemory.present);
-					}
-
-					EventOnLockstepReceive?.Invoke(clientMemory.rollbackData);
-				}
-			}
-			else
-			{
-				//lastFutur = clientMemory.futurs.Last().Value;
-				lastFutur = clientMemory.futurs.Values[^1];
-
-				PrepareClientSceneForLockstep(lastFutur.objectDataDict.Keys);
-
-				clientMemory.rollbackData.Copy(lastFutur.rollbackData);
-				EventOnLockstepReceive?.Invoke(clientMemory.rollbackData);
-
-				foreach (var objectData in lastFutur.objectDataDict.Values)
-				{
-					ApplySpawn(objectData.Message);
+					ResolveClientDeltaLockstep();
+					break;
 				}
 			}
 
 			clientMemory.RemoveAllFutur();
 		}
 
-		private static readonly List<uint> _identityToRemove = new List<uint>();
+		#endregion
 
-		private static void PrepareClientSceneForLockstep<T>(T identityList) where T : IEnumerable<uint>
+		#region ResolveLockstep
+
+		private static void ResolveClientDeltaLockstep()
 		{
-			_identityToRemove.Clear();
+			Lockstep lastFutur = null;
+
+			bool needToResetScene = true;
+
+			uint presentFrame = clientMemory.rollbackData.fixedFrameCount;
+
+			foreach (var data in clientMemory.futurs)
+			{
+				var futur = data.Value;
+
+				//if is not next delta or not completed, we wait for next frame
+				if (futur.pastFrame != presentFrame)
+				{
+					break;
+				}
+
+				lastFutur = futur;
+
+				if (needToResetScene)
+				{
+					needToResetScene = false;
+
+					//Callback: apply past
+					if (clientMemory.present != null)
+					{
+						UnspawnForClientLockstep(clientMemory.present.objectDataDict.Keys);
+						ApplyClientLockstep(clientMemory.present);
+					}
+				}
+
+				if (useDebug)
+				{
+					Debug.Log("Apply: " + presentFrame + " => " + futur.rollbackData.fixedFrameCount);
+				}
+
+				ApplyClientLockstep(futur);
+
+				presentFrame = futur.rollbackData.fixedFrameCount;
+			}
+
+			if (lastFutur == null)
+			{
+				return;
+			}
+
+			clientMemory.rollbackData.Copy(lastFutur.rollbackData);
+
+			//Save new present
+			if (clientMemory.present == null)
+			{
+				clientMemory.present = lastFutur;
+				clientMemory.futurs.Remove(lastFutur.rollbackData.fixedFrameCount);
+			}
+			else
+			{
+				clientMemory.present.Reset();
+				clientMemory.present.rollbackData.Copy(lastFutur.rollbackData);
+
+				CreatePresentLockStep(clientMemory.present);
+			}
+
+			EventOnLockstepReceive?.Invoke(clientMemory.rollbackData);
+		}
+
+		private static void ResolveFullClientLockstep()
+		{
+			//lastFutur = clientMemory.futurs.Last().Value;
+			Lockstep lastFutur = clientMemory.futurs.Values[^1];
+
+			clientMemory.rollbackData.Copy(lastFutur.rollbackData);
+			EventOnLockstepReceive?.Invoke(clientMemory.rollbackData);
+
+			//Remove no used netId from the scene
+			UnspawnForClientLockstep(lastFutur.objectDataDict.Keys);
+
+			ApplyClientLockstep(lastFutur);
+		}
+
+		#endregion
+
+		#region ApplyLockstep
+
+		private static readonly List<NetworkIdentity> _newNetIdList = new();
+
+		public static void ApplyClientLockstep(Lockstep lockstep)
+		{
+			_newNetIdList.Clear();
+
+			//Destroy
+			DestroyForClientLockstep(lockstep.destroyList);
+
+			//Spawn all new netId
+			SpawnForClientLockstep(lockstep.objectDataDict.Values, _newNetIdList);
+
+			//Apply payload on all netId
+			PayloadForClientLockstep(lockstep.objectDataDict.Values);
+
+			foreach (var objectDeltaData in lockstep.objectDeltaDataDict.Values)
+			{
+				ApplyEntityState(objectDeltaData.Message);
+			}
+
+			//Call OnStart on all the news netID
+			BootstrapForClientLockstep(_newNetIdList);
+		}
+
+		#region - UnspawnForLockstep
+
+		private static readonly List<uint> _identityToDestroy = new List<uint>();
+
+		private static void UnspawnForClientLockstep<T>(T netIdsToKeep) where T : IEnumerable<uint>
+		{
+			_identityToDestroy.Clear();
 
 			foreach (var pair in NetworkClient.spawned)
 			{
-				if (pair.Value.useRollback && !identityList.Contains(pair.Key))
+				if (pair.Value.useRollback && !netIdsToKeep.Contains(pair.Key))
 				{
-					_identityToRemove.Add(pair.Key);
+					_identityToDestroy.Add(pair.Key);
 				}
 			}
 
-			//Clean scene by destroying and disabling not needed netId
-			foreach (uint netId in _identityToRemove)
-			{
-				if (NetworkClient.spawned.TryGetValue(netId, out var identity))
-				{
-					identity.OnStopClient();
-					NetworkClient.InvokeUnSpawnHandler(identity.assetId, identity.gameObject);
-
-					if (identity.sceneId == 0)
-					{
-						Object.Destroy(identity.gameObject);
-					}
-					else
-					{
-						identity.Reset();
-						identity.gameObject.SetActive(false);
-					}
-
-					NetworkClient.spawned.Remove(netId);
-				}
-			}
+			DestroyForClientLockstep(_identityToDestroy);
 		}
 
-		public static void PrepareServerSceneForLockstep<T>(T identityList) where T : IEnumerable<uint>
+		private static void UnspawnForServerLockstep<T>(T identityList) where T : IEnumerable<uint>
 		{
-			_identityToRemove.Clear();
+			_identityToDestroy.Clear();
 
 			foreach (var pair in NetworkServer.spawned)
 			{
 				if (pair.Value.useRollback && !identityList.Contains(pair.Key))
 				{
-					_identityToRemove.Add(pair.Key);
+					_identityToDestroy.Add(pair.Key);
 				}
 			}
 
-			//Clean scene by destroying not needed netId
-			foreach (uint item in _identityToRemove)
-			{
-				if (NetworkServer.spawned.TryGetValue(item, out var identity))
-				{
-					if (identity.sceneId == 0)
-					{
-						NetworkServer.Destroy(identity.gameObject);
-					}
-					else
-					{
-						identity.Reset();
-						identity.gameObject.SetActive(false);
-					}
-				}
-			}
+			DestroyForServerLockstep(_identityToDestroy);
 		}
 
-		public static void GoToLockstep(Lockstep lockstep)
+		#endregion
+
+		#region - DestroyForLockstep
+
+		private static void DestroyForClientLockstep<T>(T netIdsToDestroy) where T : IEnumerable<uint>
 		{
-			//Apply or spawn
-			foreach (var objectData in lockstep.objectDataDict.Values)
+			//Clean scene by destroying and disabling not needed netId
+			foreach (uint netId in netIdsToDestroy)
 			{
-				ApplySpawn(objectData.Message);
+				if (useDebug)
+				{
+					Debug.Log("Destroy - netId: " + netId);
+				}
+
+				NetworkClient.DestroyObject(netId);
 			}
 		}
+
+		private static void DestroyForServerLockstep<T>(T netIdsToDestroy) where T : IEnumerable<uint>
+		{
+			//Clean scene by destroying and disabling not needed netId
+			foreach (uint netId in netIdsToDestroy)
+			{
+				if (useDebug)
+				{
+					Debug.Log("Remove: " + netId);
+				}
+
+				NetworkServer.spawned.TryGetValue(netId, out var value);
+
+				DestroyObject(value, NetworkServer.DestroyMode.Destroy);
+			}
+		}
+
+		#endregion
+
+		#region - SpawnForLockstep
+
+		public static void SpawnForClientLockstep<T>(IEnumerable<T> objectDataList, List<NetworkIdentity> newNetIdList) where T : ObjectData
+		{
+			NetworkIdentity identity;
+
+			//Spawn all new netId
+			foreach (var item in objectDataList)
+			{
+				if (NetworkClient.spawned.TryGetValue(item.Message.netId, out identity))
+				{
+					//Debug.LogWarning("Old netId: " + item.Message.netId + " | " + identity.name, identity);
+
+					if (item.Message.assetId != 0)
+					{
+						identity.assetId = item.Message.assetId;
+					}
+
+					if (!identity.gameObject.activeSelf)
+					{
+						identity.gameObject.SetActive(true);
+					}
+					continue;
+				}
+
+				if (item.Message.assetId == 0 && item.Message.sceneId == 0)
+				{
+					Debug.LogError($"OnSpawn message with netId '{item.Message.netId}' has no AssetId or sceneId");
+					continue;
+				}
+
+				identity = item.Message.sceneId == 0 ?
+					NetworkClient.SpawnPrefab(item.Message) : NetworkClient.SpawnSceneObject(item.Message.sceneId);
+
+				if (identity == null)
+				{
+					continue;
+				}
+
+				//Debug.LogWarning("New netId: " + item.Message.netId + " | " + identity.name, identity);
+
+				if (item.Message.assetId != 0)
+				{
+					identity.assetId = item.Message.assetId;
+				}
+
+				if (!identity.gameObject.activeSelf)
+				{
+					identity.gameObject.SetActive(true);
+				}
+
+				// apply local values for VR support
+				identity.transform.localPosition = item.Message.position;
+				identity.transform.localRotation = item.Message.rotation;
+				identity.transform.localScale = item.Message.scale;
+				identity.isOwned = item.Message.isOwner;
+				identity.netId = item.Message.netId;
+
+				if (item.Message.isLocalPlayer)
+				{
+					NetworkClient.InternalAddPlayer(identity);
+				}
+
+				NetworkClient.spawned[item.Message.netId] = identity;
+
+				if (identity.isOwned)
+				{
+					NetworkClient.connection?.owned.Add(identity);
+				}
+
+				newNetIdList.Add(identity);
+			}
+		}
+
+		#endregion
+
+		#region - PayloadForLockstep
+
+		private static void PayloadForClientLockstep<T>(IEnumerable<T> objectDataList) where T : ObjectData
+		{
+			NetworkIdentity identity;
+
+			//Apply payload on all netId
+			foreach (var item in objectDataList)
+			{
+				if (item.Message.payload.Count > 0)
+				{
+					using (NetworkReaderPooled payloadReader = NetworkReaderPool.Get(item.Message.payload))
+					{
+						identity = NetworkClient.spawned[item.Message.netId];
+						identity.DeserializeClient(payloadReader, true);
+					}
+				}
+			}
+		}
+
+		#endregion
+
+		#region - BootstrapForLockstep
+
+		private static void BootstrapForClientLockstep(IEnumerable<NetworkIdentity> identities)
+		{
+			//Call OnStart on all the news netID
+			foreach (var item in identities)
+			{
+				NetworkClient.BootstrapIdentity(item);
+			}
+		}
+
+		#endregion
+
+		#endregion
+
+		#region CreatePresentLockStep
 
 		public static void CreatePresentLockStep(Lockstep newLockstep)
 		{
-			if (useDebug)
-			{
-				Debug.Log("CreatePresentLockStep");
-			}
-
 			foreach (var identity in NetworkClient.spawned.Values)
 			{
 				if (identity.useRollback)
@@ -950,19 +1258,11 @@ namespace Mirror
 					newLockstep.Add(identity);
 				}
 			}
-		}
 
-		#endregion
-
-		#endregion
-
-		#region SendLockstepMessage
-
-		private static bool _broadcastLockstep = false;
-
-		public static void BroacastNextLockstep()
-		{
-			_broadcastLockstep = true;
+			if (useDebug)
+			{
+				Debug.Log("CreatePresentLockStep - size: " + newLockstep.objectDataDict.Count);
+			}
 		}
 
 		#endregion
@@ -1009,7 +1309,7 @@ namespace Mirror
 		private static void BroadcastToConnection(NetworkConnectionToClient conn)
 		{
 			// Check for null, because object could have been spawn
-			// and then destroy even before sending a single message
+			// and then destroy before sending a single message
 			for (int i = conn.newObserving.Count - 1; i >= 0; i--)
 			{
 				if (conn.newObserving[i] == null)
@@ -1027,6 +1327,7 @@ namespace Mirror
 					Debug.Log("BroadcastToConnection conn: " + conn.connectionId
 					+ " | Count: " + conn.newObserving.Count
 					+ " | rollbackState: " + conn.rollbackState
+					+ " | isFirstSpawn: " + conn.isFirstSpawn
 					+ " | broadcastLockstep: " + _broadcastLockstep);
 				}
 
