@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 705507994}
-  m_IndirectSpecularColor: {r: 0.4456606, g: 0.49535728, b: 0.5742084, a: 1}
+  m_IndirectSpecularColor: {r: 0.4433586, g: 0.4926275, b: 0.5722646, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -306,14 +306,14 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 705507993}
-  m_LocalRotation: {x: 0.43698123, y: -0.14719768, z: 0.07273364, w: 0.8843586}
+  m_LocalRotation: {x: 0.49242353, y: 0, z: 0, w: 0.8703557}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 1
-  m_LocalEulerAnglesHint: {x: 52.59, y: -18.9, z: 0}
+  m_LocalEulerAnglesHint: {x: 59, y: 0, z: 0}
 --- !u!1 &963194225
 GameObject:
   m_ObjectHideFlags: 0
@@ -505,7 +505,7 @@ PrefabInstance:
     - target: {fileID: 3648214317439040230, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
       propertyPath: m_Materials.Array.data[0]
       value: 
-      objectReference: {fileID: 2100000, guid: cc8273a52ec2f9e4195710f909dc3610, type: 2}
+      objectReference: {fileID: 2100000, guid: 20b2970fa66de3848a35a2a7f23f575d, type: 2}
     - target: {fileID: 4806493248669533827, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
       propertyPath: sceneId
       value: 1605721450
@@ -559,12 +559,20 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 7715381583575861890, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
+      propertyPath: _syncPos
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7715381583575861890, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
+      propertyPath: _syncRot
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7715381583575861890, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
       propertyPath: syncDirection
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8115066778614826000, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
       propertyPath: m_Name
-      value: BallRed_01
+      value: BallBlue
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
@@ -629,10 +637,6 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6265682513181404303, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
       propertyPath: m_ConstrainProportionsScale
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 7715381583575861890, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
-      propertyPath: syncDirection
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8115066778614826000, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
@@ -1233,7 +1237,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2500266664172958107, guid: 69ac2dc7baa5965448dea0549d0fabfc, type: 3}
       propertyPath: _rollbackMode
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 69ac2dc7baa5965448dea0549d0fabfc, type: 3}

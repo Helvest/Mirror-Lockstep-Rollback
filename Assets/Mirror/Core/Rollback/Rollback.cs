@@ -22,8 +22,8 @@ using Object = UnityEngine.Object;
 // - by Rollback.Broadcast();
 
 //In NetworkServer.DestroyObject(NetworkIdentity identity, DestroyMode mode)
-// - Add if (!identity.useRollback)
-// - around SendToObservers(identity, new ObjectDestroyMessage { netId = identity.netId });
+// - Remove all the content
+// - Add Rollback.DestroyObject(identity, mode);
 
 //In NetworkClient.RegisterSystemHandlers(bool hostMode)
 // - Replace RegisterHandler<SpawnMessage>(OnSpawn);
@@ -42,6 +42,7 @@ namespace Mirror
 
 	public enum RollbackMode
 	{
+		None = -1,
 		SendFullData,
 		SendDeltaData
 	}
@@ -420,26 +421,6 @@ namespace Mirror
 		#endregion
 
 		#region Get
-
-		/*
-	public static bool TryGetObjectData(NetworkIdentity networkIdentity, out ObjectData objectData)
-	{
-		if (clientMemory.IsEmpty)
-		{
-			Debug.LogWarning("Try Get Last Message but timeline is empty");
-		}
-		else
-		{
-			if (clientMemory.present.TryGetValue(networkIdentity.netId, out objectData))
-			{
-				return true;
-			}
-		}
-
-		objectData = default;
-		return false;
-	}
-	*/
 
 		public static bool TryGetPresentLockstep(out Lockstep lockstep)
 		{
@@ -939,12 +920,12 @@ namespace Mirror
 			{
 				case RollbackMode.SendFullData:
 				{
-					ResolveFullClientLockstep();
+					ResolveClientFullRollback();
 					break;
 				}
 				case RollbackMode.SendDeltaData:
 				{
-					ResolveClientDeltaLockstep();
+					ResolveClientDeltaRollback();
 					break;
 				}
 			}
@@ -954,9 +935,24 @@ namespace Mirror
 
 		#endregion
 
-		#region ResolveLockstep
+		#region ResolveRollback
 
-		private static void ResolveClientDeltaLockstep()
+		private static readonly List<NetworkIdentity> _newNetIdList = new();
+
+		private static void ResolveClientFullRollback()
+		{
+			var lastFutur = clientMemory.futurs.Values[^1];
+
+			clientMemory.rollbackData.Copy(lastFutur.rollbackData);
+			EventOnLockstepReceive?.Invoke(clientMemory.rollbackData);
+
+			//Remove no used netId from the scene
+			UnspawnForClientLockstep(lastFutur.objectDataDict.Keys);
+
+			ApplyClientFullLockstep(lastFutur);
+		}
+
+		private static void ResolveClientDeltaRollback()
 		{
 			Lockstep lastFutur = null;
 
@@ -984,7 +980,7 @@ namespace Mirror
 					if (clientMemory.present != null)
 					{
 						UnspawnForClientLockstep(clientMemory.present.objectDataDict.Keys);
-						ApplyClientLockstep(clientMemory.present);
+						ApplyClientFullLockstep(clientMemory.present);
 					}
 				}
 
@@ -993,7 +989,7 @@ namespace Mirror
 					Debug.Log("Apply: " + presentFrame + " => " + futur.rollbackData.fixedFrameCount);
 				}
 
-				ApplyClientLockstep(futur);
+				ApplyClientDeltaLockstep(futur);
 
 				presentFrame = futur.rollbackData.fixedFrameCount;
 			}
@@ -1022,27 +1018,25 @@ namespace Mirror
 			EventOnLockstepReceive?.Invoke(clientMemory.rollbackData);
 		}
 
-		private static void ResolveFullClientLockstep()
-		{
-			//lastFutur = clientMemory.futurs.Last().Value;
-			Lockstep lastFutur = clientMemory.futurs.Values[^1];
-
-			clientMemory.rollbackData.Copy(lastFutur.rollbackData);
-			EventOnLockstepReceive?.Invoke(clientMemory.rollbackData);
-
-			//Remove no used netId from the scene
-			UnspawnForClientLockstep(lastFutur.objectDataDict.Keys);
-
-			ApplyClientLockstep(lastFutur);
-		}
-
 		#endregion
 
 		#region ApplyLockstep
 
-		private static readonly List<NetworkIdentity> _newNetIdList = new();
+		public static void ApplyClientFullLockstep(Lockstep lockstep)
+		{
+			_newNetIdList.Clear();
 
-		public static void ApplyClientLockstep(Lockstep lockstep)
+			//Spawn all new netId
+			SpawnForClientLockstep(lockstep.objectDataDict.Values, _newNetIdList);
+
+			//Apply payload on all netId
+			PayloadForClientLockstep(lockstep.objectDataDict.Values);
+
+			//Call OnStart on all the news netID
+			BootstrapForClientLockstep(_newNetIdList);
+		}
+
+		public static void ApplyClientDeltaLockstep(Lockstep lockstep)
 		{
 			_newNetIdList.Clear();
 
@@ -1055,14 +1049,15 @@ namespace Mirror
 			//Apply payload on all netId
 			PayloadForClientLockstep(lockstep.objectDataDict.Values);
 
+			//Call OnStart on all the news netID
+			BootstrapForClientLockstep(_newNetIdList);
+
 			foreach (var objectDeltaData in lockstep.objectDeltaDataDict.Values)
 			{
 				ApplyEntityState(objectDeltaData.Message);
 			}
-
-			//Call OnStart on all the news netID
-			BootstrapForClientLockstep(_newNetIdList);
 		}
+
 
 		#region - UnspawnForLockstep
 

@@ -18,36 +18,70 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 
 	#region Sync vars
 
-	[SerializeField]
-	[SyncVar]
+	[SerializeField, SyncVar]
+	private bool _syncPos = true;
+	[SerializeField, SyncVar]
 	private Vector3 _position = default;
 
-	[SerializeField]
-	[SyncVar]
+	[Space, SerializeField, SyncVar]
+	private bool _syncRot = true;
+	[SerializeField, SyncVar]
+	private Quaternion _rotation = default;
+
+	[Space, SerializeField, SyncVar]
+	private bool _syncVel = true;
+	[SerializeField, SyncVar]
 	private Vector3 _velocity = default;
 
-	[SerializeField]
-	[SyncVar]
+	[Space, SerializeField, SyncVar]
+	private bool _syncAngVel = true;
+	[SerializeField, SyncVar]
 	private Vector3 _angularVelocity = default;
-
-	[SerializeField]
-	[SyncVar]
-	private Quaternion _rotation = default;
 
 	private void ServerSync()
 	{
-		_position = _rigidbody.position;
-		_velocity = _rigidbody.velocity;
-		_angularVelocity = _rigidbody.angularVelocity;
-		_rotation = _rigidbody.rotation;
+		if (_syncPos)
+		{
+			_position = _rigidbody.position;
+		}
+
+		if (_syncRot)
+		{
+			_rotation = _rigidbody.rotation;
+		}
+
+		if (_syncVel)
+		{
+			_velocity = _rigidbody.velocity;
+		}
+
+		if (_syncAngVel)
+		{
+			_angularVelocity = _rigidbody.angularVelocity;
+		}
 	}
 
 	private void ClientSync()
 	{
-		_rigidbody.position = _position;
-		_rigidbody.velocity = _velocity;
-		_rigidbody.angularVelocity = _angularVelocity;
-		_rigidbody.rotation = _rotation;
+		if (_syncPos)
+		{
+			_rigidbody.position = _position;
+		}
+
+		if (_syncRot)
+		{
+			_rigidbody.rotation = _rotation;
+		}
+
+		if (_syncVel)
+		{
+			_rigidbody.velocity = _velocity;
+		}
+
+		if (_syncAngVel)
+		{
+			_rigidbody.angularVelocity = _angularVelocity;
+		}
 	}
 
 	public override void OnDeserialize(NetworkReader reader, bool initialState)
@@ -100,7 +134,7 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 
 	private bool _inputSpaceWasPress = false;
 
-	[SyncVar]
+	[Space, SyncVar]
 	public bool extrapolPosition = false;
 
 	[SyncVar]
