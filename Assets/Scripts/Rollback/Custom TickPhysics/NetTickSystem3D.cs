@@ -9,9 +9,21 @@ public class NetTickSystem3D : NetTickSystem
 
 	public virtual bool AutoSimulation
 	{
-		get => Physics.autoSimulation;
+		get => Physics.simulationMode != SimulationMode.Script;
+		set
+		{
+			if (AutoSimulation != value)
+			{
+				Physics.simulationMode = value ? SimulationMode.FixedUpdate : SimulationMode.Script;
+			}
+		}
+	}
 
-		set => Physics.autoSimulation = value;
+	public virtual SimulationMode SimulationMode
+	{
+		get => Physics.simulationMode;
+
+		set => Physics.simulationMode = value;
 	}
 
 	#endregion

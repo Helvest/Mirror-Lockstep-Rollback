@@ -40,6 +40,11 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 
 	private void ServerSync()
 	{
+		if (!isServer)
+		{
+			return;
+		}
+
 		if (_syncPos)
 		{
 			_position = _rigidbody.position;
@@ -52,7 +57,7 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 
 		if (_syncVel)
 		{
-			_velocity = _rigidbody.velocity;
+			_velocity = _rigidbody.linearVelocity;
 		}
 
 		if (_syncAngVel)
@@ -75,7 +80,7 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 
 		if (_syncVel)
 		{
-			_rigidbody.velocity = _velocity;
+			_rigidbody.linearVelocity = _velocity;
 		}
 
 		if (_syncAngVel)
@@ -87,7 +92,6 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 	public override void OnDeserialize(NetworkReader reader, bool initialState)
 	{
 		base.OnDeserialize(reader, initialState);
-
 		ClientSync();
 	}
 
@@ -123,7 +127,7 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 		if (_inputSpaceWasPress)
 		{
 			_inputSpaceWasPress = false;
-			_rigidbody.velocity = Random.onUnitSphere * 50f;
+			_rigidbody.linearVelocity = Random.onUnitSphere * 50f;
 			_rigidbody.angularVelocity = Random.onUnitSphere * 50f;
 		}
 	}
@@ -137,29 +141,20 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 	[Space, SyncVar]
 	public bool extrapolPosition = false;
 
+	private bool _extrapolPositionPastValue;
+
 	[SyncVar]
 	public bool extrapolRotation = true;
 
+	private bool _extrapolRotationPastValue;
+
 	public void UpdateGraphics()
 	{
-		if (isServer)
-		{
-			ServerSync();
-		}
+		ServerSync();	
 
 		if (Input.GetKeyDown(KeyCode.Space))
 		{
 			_inputSpaceWasPress = true;
-		}
-
-		if (Input.GetKeyDown(KeyCode.A))
-		{
-
-		}
-
-		if (Input.GetKeyDown(KeyCode.Z))
-		{
-
 		}
 
 		if (isServer)
@@ -167,34 +162,36 @@ public class PlayerBall : NetworkBehaviour, IPhysicsObject
 			if (Input.GetKeyDown(KeyCode.E))
 			{
 				extrapolPosition = !extrapolPosition;
-
-				if (!extrapolPosition)
-				{
-					_visual.localPosition = Vector3.zero;
-				}
 			}
 
 			if (Input.GetKeyDown(KeyCode.R))
 			{
 				extrapolRotation = !extrapolRotation;
-
-				if (!extrapolRotation)
-				{
-					_visual.localRotation = Quaternion.identity;
-				}
 			}
 		}
 
 		if (extrapolPosition)
 		{
-			var extraPosition = _rigidbody.velocity * tickSystem.ExtraDeltaTime;
+			var extraPosition = _rigidbody.linearVelocity * tickSystem.ExtraDeltaTime;
 			_visual.position = _rigidbody.position + extraPosition;
+			_extrapolPositionPastValue = true;
+		}
+		else if (_extrapolPositionPastValue)
+		{
+			_extrapolPositionPastValue = false;
+			_visual.localPosition = Vector3.zero;
 		}
 
 		if (extrapolRotation)
 		{
 			var extraRotation = Quaternion.Euler(Mathf.Rad2Deg * tickSystem.ExtraDeltaTime * transform.InverseTransformVector(_angularVelocity));
 			_visual.rotation = _rigidbody.rotation * extraRotation;
+			_extrapolRotationPastValue = true;
+		}
+		else if(_extrapolRotationPastValue)
+		{
+			_extrapolRotationPastValue = false;
+			_visual.localRotation = Quaternion.identity;
 		}
 	}
 

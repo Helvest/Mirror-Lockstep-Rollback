@@ -75,6 +75,8 @@ public abstract class NetTickSystem : TickSystem, INetTickSystem
 
 	public override void Tick(double time, double deltaTime, double fixedDeltaTime)
 	{
+		//Debug.Log("Tick -  time :" + time + " |deltaTime: " + deltaTime + " |fixedDeltaTime: " + fixedDeltaTime);
+
 		ReadInput();
 
 		if (IsPhysicUpdated)
