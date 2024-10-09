@@ -1,5 +1,12 @@
 {
   "dependencies": {
+    "com.helvest.finitestatemachine": {
+      "version": "https://github.com/Helvest/Unity-Package-Stype-Machine.git",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "775aa3d8fd6e20f4be5e81082d4159b11321e79e"
+    },
     "com.helvest.servicelocator": {
       "version": "https://github.com/Helvest/Unity-Package-Service-Locator.git",
       "depth": 0,

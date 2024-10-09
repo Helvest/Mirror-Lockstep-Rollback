@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.helvest.finitestatemachine": "https://github.com/Helvest/Unity-Package-Stype-Machine.git",
     "com.helvest.servicelocator": "https://github.com/Helvest/Unity-Package-Service-Locator.git",
     "com.helvest.tickphysic": "file:C:/Users/pedro/Documents/Projets/Custom-Packages/Packages/Unity-Package-Tick-Physic",
     "com.unity.ide.visualstudio": "2.0.22",
