@@ -135,17 +135,16 @@ namespace Mirror
 
 		#region Update Rollback System
 
-		public override void Update()
+		public void Update()
 		{
-			base.Update();
-#if DEBUG
+	#if DEBUG
 			Rollback.useDebug = useDebug;
-#endif
+	#endif
 
 			if (RollbackSystemIsReady)
 			{
 				UpdateRollback();
-			}
+			}		
 		}
 
 		protected void UpdateRollback()
@@ -153,7 +152,7 @@ namespace Mirror
 			//auto: reception des messages
 
 			//advance the simulation to the present
-			netTickSystem.Tick(NetworkTime.time, Time.deltaTime, Time.fixedDeltaTime);
+			//netTickSystem.Tick(NetworkTime.time, Time.deltaTime, Time.fixedDeltaTime);
 
 			if (!IsServer)
 			{

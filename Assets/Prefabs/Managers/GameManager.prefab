@@ -318,14 +318,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 455455089731663566}
     m_Modifications:
-    - target: {fileID: 2158316069053250106, guid: 75bc851eb67e29d4f94e500c69580794, type: 3}
-      propertyPath: sendTimeBetweenMessage
-      value: 3
-      objectReference: {fileID: 0}
-    - target: {fileID: 5704950694187004503, guid: 75bc851eb67e29d4f94e500c69580794, type: 3}
-      propertyPath: m_RootOrder
-      value: 2
-      objectReference: {fileID: 0}
     - target: {fileID: 5704950694187004503, guid: 75bc851eb67e29d4f94e500c69580794, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -400,17 +392,9 @@ PrefabInstance:
     m_TransformParent: {fileID: 455455089731663566}
     m_Modifications:
     - target: {fileID: 1516243795262063921, guid: 83979fcc027245a4aa619b99c5122ec6, type: 3}
-      propertyPath: _autoStartRollback
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 1516243795262063921, guid: 83979fcc027245a4aa619b99c5122ec6, type: 3}
       propertyPath: <TM>k__BackingField
       value: 
       objectReference: {fileID: 2474736400444995382}
-    - target: {fileID: 4662392175822692138, guid: 83979fcc027245a4aa619b99c5122ec6, type: 3}
-      propertyPath: m_RootOrder
-      value: 1
-      objectReference: {fileID: 0}
     - target: {fileID: 4662392175822692138, guid: 83979fcc027245a4aa619b99c5122ec6, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0

@@ -23,7 +23,7 @@ PluginImporter:
         Exclude Win: 1
         Exclude Win64: 1
   - first:
-      Any: ''
+      Any: 
     second:
       enabled: 0
       settings: {}
@@ -87,6 +87,13 @@ PluginImporter:
       enabled: 0
       settings:
         CPU: AnyCPU
-  userData: ''
-  assetBundleName: ''
-  assetBundleVariant: ''
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129321
+  packageName: Mirror
+  packageVersion: 89.0.0
+  assetPath: Assets/Mirror/Plugins/Mono.Cecil/Mono.CecilX.Pdb.dll
+  uploadId: 648641

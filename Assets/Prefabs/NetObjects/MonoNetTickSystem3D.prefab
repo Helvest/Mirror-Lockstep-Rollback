@@ -15,7 +15,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &5704950694187004503
 Transform:
@@ -28,7 +28,7 @@ Transform:
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -44,10 +44,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0f934914a53b8a446998c4f331acf1f6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  <AutoUpdate>k__BackingField: 0
-  _isPhysicUpdated: 0
-  <NetTickSystem3D>k__BackingField:
-    _sendTimeBetweenMessage: 3
+  <TickSystem>k__BackingField:
+    whenToApplyRollback: 0
+    _sendTimeBetweenMessage: 1
     useDebug: 0
+  _isPhysicUpdated: 1
   autoSimulation: 0
   simulationMode: 2
+  <AutoUpdate>k__BackingField: 2
+  overrideFixedDeltaTime: 0.2
+  infoDelatTime: 0
+  infoUnscaledDeltaTime: 0
+  infoSmoothDeltaTime: 0
+  infoTime: 0

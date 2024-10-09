@@ -13,13 +13,13 @@ GameObject:
   - component: {fileID: 2394090620823507203}
   - component: {fileID: 8202861939736633570}
   - component: {fileID: 3427972049711994466}
-  - component: {fileID: 7754031961975369238}
+  - component: {fileID: 4815682636877950590}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &4662392175822692138
 Transform:
@@ -28,13 +28,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7189623261859052184}
+  serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1516243795262063921
 MonoBehaviour:
@@ -50,22 +50,42 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   dontDestroyOnLoad: 0
   runInBackground: 1
-  autoStartServerBuild: 1
-  serverTickRate: 30
+  headlessStartMode: 0
+  editorAutoStart: 0
+  sendRate: 30
+  autoStartServerBuild: 0
+  autoConnectClientBuild: 0
   offlineScene: 
   onlineScene: 
-  transport: {fileID: 7754031961975369238}
+  transport: {fileID: 4815682636877950590}
   networkAddress: localhost
   maxConnections: 10
+  disconnectInactiveConnections: 0
+  disconnectInactiveTimeout: 60
   authenticator: {fileID: 0}
   playerPrefab: {fileID: 544975416279015771, guid: 5390e984b00dac64c95085729e3767b8, type: 3}
   autoCreatePlayer: 1
   playerSpawnMethod: 0
   spawnPrefabs:
-  - {fileID: 8115066778614826000, guid: c0061d002177dda45a7986f4a78994ba, type: 3}
+  - {fileID: 8926760911618873394, guid: ac8dc08a27a4b3545896a351296f2e80, type: 3}
   - {fileID: 830971732508115933, guid: 6ee84ddd87c604644bdfd5194b7989b6, type: 3}
   - {fileID: 8571282354075680951, guid: 0cd4d23100c72234aaca9a919a84c677, type: 3}
-  _autoStartRollback: 0
+  exceptionsDisconnect: 1
+  snapshotSettings:
+    bufferTimeMultiplier: 2
+    bufferLimit: 32
+    catchupNegativeThreshold: -1
+    catchupPositiveThreshold: 1
+    catchupSpeed: 0.019999999552965164
+    slowdownSpeed: 0.03999999910593033
+    driftEmaDuration: 1
+    dynamicAdjustment: 1
+    dynamicAdjustmentTolerance: 1
+    deliveryTimeEmaDuration: 2
+  evaluationMethod: 0
+  evaluationInterval: 3
+  timeInterpolationGui: 0
+  _autoStartRollback: 1
   _rollbackMode: 0
   useDebug: 0
   <TM>k__BackingField: {fileID: 0}
@@ -94,11 +114,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c761308e733c51245b2e8bb4201f46dc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  secretHandshake: 3799964107789553489
-  serverBroadcastListenPort: 47777
   enableActiveDiscovery: 1
+  BroadcastAddress: 
+  serverBroadcastListenPort: 47777
   ActiveDiscoveryInterval: 3
-  transport: {fileID: 7754031961975369238}
+  transport: {fileID: 4815682636877950590}
   OnServerFound:
     m_PersistentCalls:
       m_Calls:
@@ -114,6 +134,7 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+  secretHandshake: 3799964107789553489
 --- !u!114 &3427972049711994466
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -127,7 +148,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   networkDiscovery: {fileID: 8202861939736633570}
---- !u!114 &7754031961975369238
+--- !u!114 &4815682636877950590
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -136,23 +157,23 @@ MonoBehaviour:
   m_GameObject: {fileID: 7189623261859052184}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6b0fecffa3f624585964b0d0eb21b18e, type: 3}
+  m_Script: {fileID: 11500000, guid: f7e416e0486524f0d9580be7e13388f4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Port: 7777
+  port: 7777
   DualMode: 1
   NoDelay: 1
   Interval: 10
   Timeout: 10000
+  RecvBufferSize: 7361536
+  SendBufferSize: 7361536
   FastResend: 2
-  CongestionWindow: 0
-  SendWindowSize: 4096
   ReceiveWindowSize: 4096
+  SendWindowSize: 4096
   MaxRetransmit: 40
-  NonAlloc: 1
-  MaximizeSendReceiveBuffersToOSLimit: 1
-  ReliableMaxMessageSize: 298449
-  UnreliableMaxMessageSize: 1199
+  MaximizeSocketBuffers: 1
+  ReliableMaxMessageSize: 297433
+  UnreliableMaxMessageSize: 1194
   debugLog: 0
   statisticsGUI: 0
   statisticsLog: 0

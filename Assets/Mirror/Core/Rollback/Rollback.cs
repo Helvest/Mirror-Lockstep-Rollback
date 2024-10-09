@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 //Add to NetworkConnectionToClient
 // - public RollbackState rollbackState = RollbackState.NotObserving;
@@ -21,9 +20,9 @@ using Object = UnityEngine.Object;
 // - Replace NetworkServer.Broadcast();
 // - by Rollback.Broadcast();
 
-//In NetworkServer.DestroyObject(NetworkIdentity identity, DestroyMode mode)
+//In NetworkServer.UnSpawn(GameObject obj)
 // - Remove all the content
-// - Add Rollback.DestroyObject(identity, mode);
+// - Add Rollback.UnSpawn(obj)
 
 //In NetworkClient.RegisterSystemHandlers(bool hostMode)
 // - Replace RegisterHandler<SpawnMessage>(OnSpawn);
@@ -222,7 +221,9 @@ namespace Mirror
 
 		#region Fields
 
-		public readonly RollbackData rollbackData = new RollbackData();
+		public uint lastFrameReceive = 0;
+
+		public readonly RollbackData lastResolvedRollbackData = new RollbackData();
 
 		public uint firstFrame = 0;
 
@@ -293,6 +294,48 @@ namespace Mirror
 			}
 
 			futurs.Clear();
+		}
+
+		public void RemoveFuturUntil(uint frame)
+		{
+			for (int i = 0; i < futurs.Count; i++)
+			{
+				if (futurs.Keys[i] <= frame)
+				{
+					Lockstep.ReturnToPool(futurs.Values[i]);
+					futurs.RemoveAt(i);
+					i--;
+				}
+				else
+				{
+					return;
+				}
+			}
+		}
+
+		public bool TryGetFuturOrClosestPrevious(uint frame, out Lockstep lockstep)
+		{
+			if (futurs.ContainsKey(frame))
+			{
+				lockstep = futurs[frame];
+				return true;
+			}
+
+			lockstep = null;
+
+			foreach (var item in futurs)
+			{
+				if (item.Key <= frame)
+				{
+					lockstep = item.Value;
+				}
+				else
+				{
+					break;
+				}
+			}
+
+			return lockstep != null;
 		}
 
 		#endregion
@@ -576,10 +619,29 @@ namespace Mirror
 
 		private readonly static List<uint> _netIdToDestroy = new();
 
-		//Replace NetworkServer.DestroyObject(NetworkIdentity identity, DestroyMode mode)
-		internal static void DestroyObject(NetworkIdentity identity, NetworkServer.DestroyMode mode)
+		//Replace NetworkServer.UnSpawn(GameObject obj)
+		public static void UnSpawn(GameObject obj)
 		{
 			// Debug.Log($"DestroyObject instance:{identity.netId}");
+
+			// NetworkServer.Unspawn should only be called on server or host.
+			// on client, show a warning to explain what it does.
+			if (!NetworkServer.active)
+			{
+				Debug.LogWarning("NetworkServer.Unspawn() called without an active server. Servers can only destroy while active, clients can only ask the server to destroy (for example, with a [Command]), after which the server may decide to destroy the object and broadcast the change to all clients.");
+				return;
+			}
+
+			if (obj == null)
+			{
+				Debug.Log("NetworkServer.Unspawn(): object is null");
+				return;
+			}
+
+			if (!NetworkServer.GetNetworkIdentity(obj, out NetworkIdentity identity))
+			{
+				return;
+			}
 
 			// only call OnRebuildObservers while active,
 			// not while shutting down
@@ -639,27 +701,9 @@ namespace Mirror
 			// we are on the server. call OnStopServer.
 			identity.OnStopServer();
 
-			// are we supposed to GameObject.Destroy() it completely?
-			if (mode == NetworkServer.DestroyMode.Destroy)
-			{
-				identity.destroyCalled = true;
-
-				// Destroy if application is running
-				if (Application.isPlaying)
-				{
-					Object.Destroy(identity.gameObject);
-				}
-				// Destroy can't be used in Editor during tests. use DestroyImmediate.
-				else
-				{
-					Object.DestroyImmediate(identity.gameObject);
-				}
-			}
-			// otherwise simply .Reset() and set inactive again
-			else if (mode == NetworkServer.DestroyMode.Reset)
-			{
-				identity.Reset();
-			}
+			// finally reset the state and deactivate it
+			identity.ResetState();
+			identity.gameObject.SetActive(false);
 		}
 
 		#endregion
@@ -670,8 +714,9 @@ namespace Mirror
 
 		#region - LockstepMessage
 
-		public static event Action<RollbackData> EventOnLockstepReceive;
 		public static event Action<uint, Lockstep> EventLockstepFinish;
+		public static event Action<RollbackData> EventOnLockstepReceive;
+		public static event Action<RollbackData> EventOnRollbackResolve;
 
 		private static bool _isRecevingLockstep = false;
 
@@ -719,7 +764,7 @@ namespace Mirror
 
 			if (message.isFirst)
 			{
-				clientMemory.rollbackData.Copy(data);
+				clientMemory.lastResolvedRollbackData.Copy(data);
 			}
 
 			if (message.pastFrame < clientMemory.firstFrame)
@@ -747,7 +792,8 @@ namespace Mirror
 
 			var data = RollbackData.GetFromPool();
 
-			data.isPhysicUpdated = clientMemory.rollbackData.isPhysicUpdated;
+			//todo : replace by last message
+			data.isPhysicUpdated = clientMemory.lastResolvedRollbackData.isPhysicUpdated;
 			data.timeAtSimulation = message.timeAtSimulation;
 			data.normalTime = message.normalTime;
 			data.fixedTime = message.fixedTime;
@@ -780,7 +826,8 @@ namespace Mirror
 
 			var data = RollbackData.GetFromPool();
 
-			data.isPhysicUpdated = clientMemory.rollbackData.isPhysicUpdated;
+			//todo : replace by last message
+			data.isPhysicUpdated = clientMemory.lastResolvedRollbackData.isPhysicUpdated;
 			data.timeAtSimulation = message.timeAtSimulation;
 			data.normalTime = message.normalTime;
 			data.fixedTime = message.fixedTime;
@@ -807,6 +854,8 @@ namespace Mirror
 			var lockstep = clientMemory.FinishConstruction();
 
 			EventLockstepFinish?.Invoke(lockstep.rollbackData.fixedFrameCount, lockstep);
+
+			_lockstepWereReceive = true;
 		}
 
 		#endregion
@@ -908,29 +957,73 @@ namespace Mirror
 
 		#region NetworkEarlyUpdate
 
+		private static bool _lockstepWereReceive = false;
+
 		//Updated all frame by NetworkClient.NetworkEarlyUpdate
 		public static void OnClientNetworkEndOfEarlyUpdate()
 		{
-			if (!clientMemory.HaveFutur)
+			if (_lockstepWereReceive)
 			{
-				return;
+				_lockstepWereReceive = false;
+
+				if (!clientMemory.HaveFutur)
+				{
+					return;
+				}
+
+				switch (rollbackMode)
+				{
+					case RollbackMode.SendFullData:
+					{
+						DetectClientRollback();
+						break;
+					}
+					case RollbackMode.SendDeltaData:
+					{
+						DetectClientDeltaRollback();
+						break;
+					}
+				}
 			}
 
-			switch (rollbackMode)
+			//todo : remove futur when apply
+			//clientMemory.RemoveAllFutur();
+		}
+
+		#endregion
+
+		#region DetectRollback
+
+		private static void DetectClientRollback()
+		{
+			var lastFutur = clientMemory.futurs.Keys[^1];
+
+			if (lastFutur == clientMemory.firstFrame || lastFutur > clientMemory.lastFrameReceive)
 			{
-				case RollbackMode.SendFullData:
+				clientMemory.lastFrameReceive = lastFutur;
+				EventOnLockstepReceive?.Invoke(clientMemory.futurs[lastFutur].rollbackData);
+			}
+		}
+
+		private static void DetectClientDeltaRollback()
+		{
+			uint lastFutur = clientMemory.lastResolvedRollbackData.fixedFrameCount;
+
+			foreach (var futur in clientMemory.futurs.Values)
+			{
+				if (futur.pastFrame != lastFutur)
 				{
-					ResolveClientFullRollback();
 					break;
 				}
-				case RollbackMode.SendDeltaData:
-				{
-					ResolveClientDeltaRollback();
-					break;
-				}
+
+				lastFutur = futur.rollbackData.fixedFrameCount;
 			}
 
-			clientMemory.RemoveAllFutur();
+			if (lastFutur == clientMemory.firstFrame || lastFutur > clientMemory.lastFrameReceive)
+			{
+				clientMemory.lastFrameReceive = lastFutur;
+				EventOnLockstepReceive?.Invoke(clientMemory.futurs[lastFutur].rollbackData);
+			}
 		}
 
 		#endregion
@@ -939,38 +1032,78 @@ namespace Mirror
 
 		private static readonly List<NetworkIdentity> _newNetIdList = new();
 
-		private static void ResolveClientFullRollback()
+		public static bool TryResolveClientLastRollback()
 		{
-			var lastFutur = clientMemory.futurs.Values[^1];
+			if (clientMemory.futurs.Count == 0)
+			{
+				return false;
+			}
 
-			clientMemory.rollbackData.Copy(lastFutur.rollbackData);
-			EventOnLockstepReceive?.Invoke(clientMemory.rollbackData);
-
-			//Remove no used netId from the scene
-			UnspawnForClientLockstep(lastFutur.objectDataDict.Keys);
-
-			ApplyClientFullLockstep(lastFutur);
+			var fixedFrameCount = clientMemory.futurs.Keys[^1];
+			return TryResolveClientRollback(fixedFrameCount);
 		}
 
-		private static void ResolveClientDeltaRollback()
+		public static bool TryResolveClientRollback(uint fixedFrameCount)
 		{
+			switch (rollbackMode)
+			{
+				case RollbackMode.SendFullData:
+				{
+					if(TryResolveClientFullRollback(fixedFrameCount, out var lockstep))
+					{
+						EventOnRollbackResolve?.Invoke(lockstep.rollbackData);
+						clientMemory.RemoveFuturUntil(lockstep.rollbackData.fixedFrameCount);
+						return true;
+					}
+					break;
+				}
+				case RollbackMode.SendDeltaData:
+				{
+					if (TryResolveClientDeltaRollback(fixedFrameCount, out var lockstep))
+					{
+						EventOnRollbackResolve?.Invoke(lockstep.rollbackData);
+						clientMemory.RemoveFuturUntil(lockstep.rollbackData.fixedFrameCount);
+						return true;
+					}
+					break;
+				}
+			}
+
+			return false;
+		}
+
+		public static bool TryResolveClientFullRollback(uint fixedFrameCount, out Lockstep lockstep)
+		{
+			if (!clientMemory.TryGetFuturOrClosestPrevious(fixedFrameCount, out lockstep))
+			{
+				return false;
+			}
+
+			clientMemory.lastResolvedRollbackData.Copy(lockstep.rollbackData);
+
+			//Remove no used netId from the scene
+			UnspawnForClientLockstep(lockstep.objectDataDict.Keys);
+
+			ApplyClientFullLockstep(lockstep);
+
+			return true;
+		}
+
+		private static bool TryResolveClientDeltaRollback(uint fixedFrameCount, out Lockstep lockstep)
+		{
+			uint presentFrame = clientMemory.lastResolvedRollbackData.fixedFrameCount;
 			Lockstep lastFutur = null;
-
 			bool needToResetScene = true;
-
-			uint presentFrame = clientMemory.rollbackData.fixedFrameCount;
 
 			foreach (var data in clientMemory.futurs)
 			{
-				var futur = data.Value;
-
-				//if is not next delta or not completed, we wait for next frame
-				if (futur.pastFrame != presentFrame)
+				//if futur is over target or if no next delta, stop
+				if (data.Key > fixedFrameCount || data.Value.pastFrame != presentFrame)
 				{
 					break;
 				}
 
-				lastFutur = futur;
+				lastFutur = data.Value;
 
 				if (needToResetScene)
 				{
@@ -986,25 +1119,27 @@ namespace Mirror
 
 				if (useDebug)
 				{
-					Debug.Log("Apply: " + presentFrame + " => " + futur.rollbackData.fixedFrameCount);
+					Debug.Log("Apply: " + presentFrame + " => " + data.Value.rollbackData.fixedFrameCount);
 				}
 
-				ApplyClientDeltaLockstep(futur);
+				ApplyClientDeltaLockstep(data.Value);
 
-				presentFrame = futur.rollbackData.fixedFrameCount;
+				presentFrame = data.Value.rollbackData.fixedFrameCount;
 			}
 
 			if (lastFutur == null)
 			{
-				return;
+				lockstep = null;
+				return false;
 			}
 
-			clientMemory.rollbackData.Copy(lastFutur.rollbackData);
+			clientMemory.lastResolvedRollbackData.Copy(lastFutur.rollbackData);
 
 			//Save new present
 			if (clientMemory.present == null)
 			{
 				clientMemory.present = lastFutur;
+				//Manually removed to not return to pool
 				clientMemory.futurs.Remove(lastFutur.rollbackData.fixedFrameCount);
 			}
 			else
@@ -1015,7 +1150,8 @@ namespace Mirror
 				CreatePresentLockStep(clientMemory.present);
 			}
 
-			EventOnLockstepReceive?.Invoke(clientMemory.rollbackData);
+			lockstep = clientMemory.present;
+			return true;
 		}
 
 		#endregion
@@ -1123,7 +1259,8 @@ namespace Mirror
 
 				NetworkServer.spawned.TryGetValue(netId, out var value);
 
-				DestroyObject(value, NetworkServer.DestroyMode.Destroy);
+				//DestroyObject(value, NetworkServer.DestroyMode.Destroy);
+				NetworkServer.Destroy(value.gameObject);
 			}
 		}
 
@@ -1232,9 +1369,9 @@ namespace Mirror
 		private static void BootstrapForClientLockstep(IEnumerable<NetworkIdentity> identities)
 		{
 			//Call OnStart on all the news netID
-			foreach (var item in identities)
+			foreach (var identity in identities)
 			{
-				NetworkClient.BootstrapIdentity(item);
+				NetworkClient.BootstrapIdentity(identity);
 			}
 		}
 
@@ -1395,21 +1532,6 @@ namespace Mirror
 
 						conn.Send(message);
 					}
-
-
-					// clear dirty bits only for the components that we serialized
-					// DO NOT clean ALL component's dirty bits, because
-					// components can have different syncIntervals and we don't
-					// want to reset dirty bits for the ones that were not
-					// synced yet.
-					// (we serialized only the IsDirty() components, or all of
-					//  them if initialState. clearing the dirty ones is enough.)
-					//
-					// NOTE: this is what we did before push->pull
-					//       broadcasting. let's keep doing this for
-					//       feature parity to not break anyone's project.
-					//       TODO make this more simple / unnecessary later.
-					identity.ClearDirtyComponentsDirtyBits();
 				}
 				// spawned list should have no null entries because we
 				// always call Remove in OnObjectDestroy everywhere.
