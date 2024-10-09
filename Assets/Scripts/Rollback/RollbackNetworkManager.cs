@@ -135,11 +135,13 @@ namespace Mirror
 
 		#region Update Rollback System
 
-		public void Update()
-		{
+		public override void Update()
+		{		
 	#if DEBUG
 			Rollback.useDebug = useDebug;
 	#endif
+
+			base.Update();
 
 			if (RollbackSystemIsReady)
 			{

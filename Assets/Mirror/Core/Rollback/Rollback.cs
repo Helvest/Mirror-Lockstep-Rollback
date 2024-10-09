@@ -22,9 +22,9 @@ using UnityEngine;
 
 //In NetworkServer.UnSpawn(GameObject obj)
 // - Remove all the content
-// - Add Rollback.UnSpawn(obj)
+// - Add Rollback.UnSpawn(obj);
 
-//In NetworkClient.RegisterSystemHandlers(bool hostMode)
+//In NetworkClient.RegisterMessageHandlers(bool hostMode)
 // - Replace RegisterHandler<SpawnMessage>(OnSpawn);
 // - By RegisterHandler<SpawnMessage>(Rollback.OnSpawn);
 // - Replace RegisterHandler<EntityStateMessage>(OnEntityStateMessage);
@@ -620,7 +620,7 @@ namespace Mirror
 		private readonly static List<uint> _netIdToDestroy = new();
 
 		//Replace NetworkServer.UnSpawn(GameObject obj)
-		public static void UnSpawn(GameObject obj)
+		public static void UnSpawn(GameObject obj, bool resetState)
 		{
 			// Debug.Log($"DestroyObject instance:{identity.netId}");
 
@@ -702,8 +702,11 @@ namespace Mirror
 			identity.OnStopServer();
 
 			// finally reset the state and deactivate it
-			identity.ResetState();
-			identity.gameObject.SetActive(false);
+			if (resetState)
+			{
+				identity.ResetState();
+				identity.gameObject.SetActive(false);
+			}
 		}
 
 		#endregion
@@ -1383,7 +1386,7 @@ namespace Mirror
 
 		public static void CreatePresentLockStep(Lockstep newLockstep)
 		{
-			foreach (var identity in NetworkClient.spawned.Values)
+			foreach (NetworkIdentity identity in NetworkClient.spawned.Values)
 			{
 				if (identity.useRollback)
 				{

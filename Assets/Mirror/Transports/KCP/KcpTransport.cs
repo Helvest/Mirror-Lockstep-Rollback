@@ -122,7 +122,7 @@ namespace kcp2k
 
             // server
             server = new KcpServer(
-                (connectionId) => OnServerConnected.Invoke(connectionId),
+                (connectionId, endPoint) => OnServerConnectedWithAddress.Invoke(connectionId, endPoint.PrettyAddress()),
                 (connectionId, message, channel) => OnServerDataReceived.Invoke(connectionId, message, FromKcpChannel(channel)),
                 (connectionId) => OnServerDisconnected.Invoke(connectionId),
                 (connectionId, error, reason) => OnServerError.Invoke(connectionId, ToTransportError(error), reason),
@@ -208,13 +208,7 @@ namespace kcp2k
         public override string ServerGetClientAddress(int connectionId)
         {
             IPEndPoint endPoint = server.GetClientEndPoint(connectionId);
-            return endPoint != null
-                // Map to IPv4 if "IsIPv4MappedToIPv6"
-                // "::ffff:127.0.0.1" -> "127.0.0.1"
-                ? (endPoint.Address.IsIPv4MappedToIPv6
-                ? endPoint.Address.MapToIPv4().ToString()
-                : endPoint.Address.ToString())
-                : "";
+            return endPoint.PrettyAddress();
         }
         public override void ServerStop() => server.Stop();
         public override void ServerEarlyUpdate()
