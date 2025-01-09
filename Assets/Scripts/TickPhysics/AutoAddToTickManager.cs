@@ -7,7 +7,7 @@ namespace TickPhysics
 		private IPhysicsObject[] _physicObjects;
 
 		[SerializeField]
-		private bool _alsoAddChildrenComponents = false;
+		private bool _alsoAddChildrenComponents;
 
 		private void Awake()
 		{

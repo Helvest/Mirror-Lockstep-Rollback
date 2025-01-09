@@ -18,13 +18,13 @@ public class NetTickSystem3D : TickSystem3D, INetTickSystem
 
 	public WhenToApplyRollback whenToApplyRollback = WhenToApplyRollback.OnPhysicTickOneFrameLate;
 
-	public bool StateWasReceive { get; set; } = false;
+	public bool StateWasReceive { get; set; }
 
 	//public bool StateWasRollback { get; set; } = false;
 
-	public bool SendConfigMessage { get; set; } = false;
+	public bool SendConfigMessage { get; set; }
 
-	protected uint pastLockstep = 0;
+	protected uint pastLockstep;
 
 	public override bool IsPhysicUpdated
 	{
@@ -52,11 +52,11 @@ public class NetTickSystem3D : TickSystem3D, INetTickSystem
 		set => _sendTimeBetweenMessage = value < Time.fixedDeltaTime ? Time.fixedDeltaTime : value;
 	}
 
-	private float _nextSendTime = 0;
+	private float _nextSendTime;
 
-	private uint _lastFrameSend = 0;
+	private uint _lastFrameSend;
 
-	public bool useDebug = false;
+	public bool useDebug;
 
 	#endregion
 

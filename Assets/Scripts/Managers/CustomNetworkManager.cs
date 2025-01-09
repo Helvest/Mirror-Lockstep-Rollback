@@ -8,7 +8,7 @@ public class CustomNetworkManager : RollbackNetworkManager
 	#region Fields
 
 	[field: SerializeField, Header("Custom")]
-	protected MonoTypeMachine TM { get; private set; } = default;
+	protected MonoTypeMachine TM { get; private set; }
 
 	#endregion
 

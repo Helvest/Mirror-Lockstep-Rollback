@@ -8,10 +8,10 @@ public class MatchManager : NetworkBehaviour
 
 	#region Fields
 
-	protected ITickSystem tickSystem = default;
+	protected ITickSystem tickSystem;
 
 	[SerializeField]
-	private List<NetworkBehaviour> _pawnableArray = default;
+	private List<NetworkBehaviour> _pawnableArray;
 
 	[SyncVar]
 	public List<NetworkBehaviour> netGoList = new();
@@ -52,7 +52,7 @@ public class MatchManager : NetworkBehaviour
 	{
 		//auto: reception des messages
 		//server: recois les inputs
-		//client: reçois les inputs et le lockstep
+		//client: reï¿½ois les inputs et le lockstep
 
 		if (isClient)
 		{

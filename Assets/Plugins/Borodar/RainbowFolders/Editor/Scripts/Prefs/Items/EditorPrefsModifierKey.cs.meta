@@ -1,0 +1,19 @@
+fileFormatVersion: 2
+guid: 6d386918738e29e4aa79cb70ee743ef6
+timeCreated: 1445259431
+licenseType: Store
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 143526
+  packageName: Rainbow Folders 2
+  packageVersion: 2.4.2
+  assetPath: Assets/Plugins/Borodar/RainbowFolders/Editor/Scripts/Prefs/Items/EditorPrefsModifierKey.cs
+  uploadId: 716027

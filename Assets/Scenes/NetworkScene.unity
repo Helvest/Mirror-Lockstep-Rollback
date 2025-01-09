@@ -42,7 +42,8 @@ RenderSettings:
 --- !u!157 &3
 LightmapSettings:
   m_ObjectHideFlags: 0
-  serializedVersion: 12
+  serializedVersion: 13
+  m_BakeOnSceneLoad: 0
   m_GISettings:
     serializedVersion: 2
     m_BounceScale: 1
@@ -1502,6 +1503,8 @@ GameObject:
   m_Component:
   - component: {fileID: 2131256709}
   - component: {fileID: 2131256708}
+  - component: {fileID: 2131256711}
+  - component: {fileID: 2131256710}
   m_Layer: 0
   m_Name: Controle
   m_TagString: Untagged
@@ -1535,12 +1538,46 @@ Transform:
   m_GameObject: {fileID: 2131256707}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -1.2919636, y: 21.616936, z: 2.146933}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2131256710
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2131256707}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b91ecbcc199f4492b9a91e820070131, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  useRollback: 0
+  sceneId: 3761199116
+  _assetId: 0
+  serverOnly: 0
+  visibility: 0
+  hasSpawned: 0
+--- !u!114 &2131256711
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2131256707}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfef5069ccf346dca632b91ab5a14855, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  _control: {fileID: 2131256708}
 --- !u!1001 &455455090033853811
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1593,6 +1630,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1991146263840818588, guid: 69ac2dc7baa5965448dea0549d0fabfc, type: 3}
+      propertyPath: overrideFixedDeltaTime
+      value: 0.1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1991146263840818588, guid: 69ac2dc7baa5965448dea0549d0fabfc, type: 3}
+      propertyPath: <TickSystem>k__BackingField._sendTimeBetweenMessage
+      value: 0.2
+      objectReference: {fileID: 0}
     - target: {fileID: 2500266664172958107, guid: 69ac2dc7baa5965448dea0549d0fabfc, type: 3}
       propertyPath: _rollbackMode
       value: 1
@@ -1611,8 +1656,8 @@ SceneRoots:
   - {fileID: 1757378097}
   - {fileID: 2131256709}
   - {fileID: 455455090033853811}
-  - {fileID: 342884890}
   - {fileID: 1622214390}
+  - {fileID: 342884890}
   - {fileID: 1073897683}
   - {fileID: 1290744924}
   - {fileID: 1178930558}

@@ -3,7 +3,7 @@ using UnityEngine;
 public class AutoAddToSL : MonoBehaviour
 {
 	[SerializeField]
-	private MonoBehaviour[] _monoBehaviourToAdd = default;
+	private MonoBehaviour[] _monoBehaviourToAdd;
 
 	private void OnEnable()
 	{

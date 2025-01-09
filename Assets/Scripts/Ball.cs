@@ -7,32 +7,32 @@ public class Ball : MonoBehaviour, IPhysicsObject
 
 	#region Fields
 
-	protected ITickSystem tickSystem = default;
-	protected MonoTickSystem3D tickSystem3D = default;
+	protected ITickSystem tickSystem;
+	protected MonoTickSystem3D tickSystem3D;
 
 	[field: SerializeField]
-	public Rigidbody CachedRigidbody { get; private set; } = default;
+	public Rigidbody CachedRigidbody { get; private set; }
 
 	[field: SerializeField]
-	public Collider CachedCollider { get; private set; } = default;
+	public Collider CachedCollider { get; private set; }
 
 	[SerializeField]
-	private Transform _visual = default;
+	private Transform _visual;
 
 	[SerializeField]
 	[FormerlySerializedAs("_ghost")]
-	private Transform _physicGhost = default;
+	private Transform _physicGhost;
 
 	public bool useVisual = true;
 
 	[Range(0f, 8f)]
 	public float speedScale = 1.0f;
 
-	public bool divideByTwo = false;
+	public bool divideByTwo;
 
-	public bool multiplyByTwo = false;
+	public bool multiplyByTwo;
 
-	public bool debug = false;
+	public bool debug;
 
 	#endregion
 
@@ -153,7 +153,7 @@ public class Ball : MonoBehaviour, IPhysicsObject
 	#region UpdateGraphics
 
 	[Space]
-	public bool extrapolPosition = false;
+	public bool extrapolPosition;
 
 	private bool _extrapolPositionPastValue;
 

@@ -7,10 +7,10 @@ public class BallNet : NetworkBehaviour, IPhysicsObject
 
 	#region Fields
 
-	protected ITickSystem tickSystem = default;
+	protected ITickSystem tickSystem;
 
 	[SerializeField]
-	private Ball _ball = default;
+	private Ball _ball;
 
 	private Rigidbody CachedRigidbody => _ball.CachedRigidbody;
 
@@ -24,28 +24,28 @@ public class BallNet : NetworkBehaviour, IPhysicsObject
 	[SerializeField, SyncVar]
 	private bool _syncPos = true;
 	[SerializeField, SyncVar]
-	private Vector3 _position = default;
+	private Vector3 _position;
 
 	[Space, SerializeField, SyncVar]
 	private bool _syncRot = true;
 	[SerializeField, SyncVar]
-	private Quaternion _rotation = default;
+	private Quaternion _rotation;
 
 	[Space, SerializeField, SyncVar]
 	private bool _syncVel = true;
 	[SerializeField, SyncVar]
-	private Vector3 _velocity = default;
+	private Vector3 _velocity;
 
 	[Space, SerializeField, SyncVar]
 	private bool _syncAngVel = true;
 	[SerializeField, SyncVar]
-	private Vector3 _angularVelocity = default;
+	private Vector3 _angularVelocity;
 
 	[Space, SerializeField, SyncVar]
-	private bool _extrapolPosition = false;
+	private bool _extrapolPosition;
 
 	[SerializeField, SyncVar]
-	private bool _extrapolRotation = false;
+	private bool _extrapolRotation;
 
 	private void ServerSync()
 	{

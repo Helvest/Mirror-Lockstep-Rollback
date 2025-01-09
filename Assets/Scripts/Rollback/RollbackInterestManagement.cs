@@ -5,7 +5,7 @@ using UnityEngine;
 public class RollbackInterestManagement : InterestManagement
 {
 	[SerializeField]
-	private bool _useDebug = false;
+	private bool _useDebug;
 
 	//Call when player added
 	public override bool OnCheckObserver(NetworkIdentity identity, NetworkConnectionToClient newObserver)

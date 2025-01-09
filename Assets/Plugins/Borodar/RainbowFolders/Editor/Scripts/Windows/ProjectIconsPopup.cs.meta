@@ -1,0 +1,19 @@
+fileFormatVersion: 2
+guid: aaf529fb80c67214282d2067e7ea5d82
+timeCreated: 1445259431
+licenseType: Store
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 143526
+  packageName: Rainbow Folders 2
+  packageVersion: 2.4.2
+  assetPath: Assets/Plugins/Borodar/RainbowFolders/Editor/Scripts/Windows/ProjectIconsPopup.cs
+  uploadId: 716027

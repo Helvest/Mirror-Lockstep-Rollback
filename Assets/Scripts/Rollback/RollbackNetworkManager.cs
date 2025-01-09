@@ -23,23 +23,23 @@ namespace Mirror
 			}
 		}
 
-		protected INetTickSystem netTickSystem = default;
+		protected INetTickSystem netTickSystem;
 
-		public bool IsServer { get; private set; } = false;
+		public bool IsServer { get; private set; }
 
-		public bool IsClient { get; private set; } = false;
+		public bool IsClient { get; private set; }
 
-		public bool RollbackSystemIsReady { get; private set; } = false;
+		public bool RollbackSystemIsReady { get; private set; }
 
 		[Header("Rollback")]
 
 		[SerializeField]
-		private bool _autoStartRollback = false;
+		private bool _autoStartRollback;
 
 		[SerializeField]
-		private RollbackMode _rollbackMode = default;
+		private RollbackMode _rollbackMode;
 
-		public bool useDebug = false;
+		public bool useDebug;
 
 		#endregion
 

@@ -1,3 +1,4 @@
-To do list:
+To-do list:
 
-- Forcer l'ordre des spawn d'une sc�ne ?
+- Forcer l'ordre des spawn d'une scéne ?
+- Controler la vitesse du temps en réseau

@@ -3,17 +3,17 @@ using UnityEngine;
 
 public class Match : MonoBehaviour
 {
-	protected NetworkManager networkManager = default;
-	protected MatchManager matchManager = default;
+	protected NetworkManager networkManager;
+	protected MatchManager matchManager;
 
 	[SerializeField]
-	private MonoServiceLocator _serverService = default;
+	private MonoServiceLocator _serverService;
 	[SerializeField]
-	private MonoServiceLocator _clientService = default;
+	private MonoServiceLocator _clientService;
 
-	private bool _isServer = false;
+	private bool _isServer;
 
-	private bool _isClient = false;
+	private bool _isClient;
 
 	private void OnEnable()
 	{

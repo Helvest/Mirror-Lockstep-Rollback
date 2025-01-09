@@ -1,0 +1,19 @@
+fileFormatVersion: 2
+guid: 4ac4937e59e72ef47a4e91e5ba2b02d2
+timeCreated: 1445182907
+licenseType: Store
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 143526
+  packageName: Rainbow Folders 2
+  packageVersion: 2.4.2
+  assetPath: Assets/Plugins/Borodar/RainbowFolders/Editor/Scripts/Settings/ProjectRulesetExporter.cs
+  uploadId: 716027

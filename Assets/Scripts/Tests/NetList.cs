@@ -7,7 +7,7 @@ using UnityEngine;
 public class NetList : NetworkBehaviour
 {
 	[SerializeField]
-	private NetworkBehaviour _prefab = default;
+	private NetworkBehaviour _prefab;
 
 	[SyncVar]
 	public List<NetworkBehaviour> listBalls = new();

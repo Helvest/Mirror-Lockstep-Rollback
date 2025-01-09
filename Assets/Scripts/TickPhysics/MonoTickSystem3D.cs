@@ -13,7 +13,7 @@ public abstract class AbstractMonoTickSystem3D<T> : AbstractMonoTickSystem<T> wh
 
 	// autoSimulation is a flag that determines whether the simulation should run automatically
 	[SerializeField]
-	protected bool autoSimulation = false;
+	protected bool autoSimulation;
 
 	// simulationMode determines the deltaTime the simulation use
 	[SerializeField]
@@ -70,14 +70,14 @@ public abstract class AbstractMonoTickSystem3D<T> : AbstractMonoTickSystem<T> wh
 	public virtual SimulationMode AutoUpdate { get; set; } = SimulationMode.Script;
 
 	// _wasUpdated is a flag that determines whether the simulation has been updated in the current frame
-	protected bool _wasUpdated = false;
+	protected bool _wasUpdated;
 
 	// overrideFixedDeltaTime is the fixed delta time to use when the simulation mode is set to Script
 	[Range(1f, 0.01f)]
 	public float overrideFixedDeltaTime = 0.5f;
 
 	// previousTime is the time of the previous frame
-	protected double previousTime = 0f;
+	protected double previousTime;
 
 	// FixedUpdate is called at a fixed interval
 	protected virtual void FixedUpdate()
